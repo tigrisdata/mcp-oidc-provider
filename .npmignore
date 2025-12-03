@@ -1,0 +1,23 @@
+# Source files (we only publish dist/)
+src/
+
+# Config files
+tsconfig.json
+tsconfig.build.json
+.eslintrc*
+.prettierrc*
+vitest.config.*
+
+# Tests
+**/*.test.ts
+**/*.spec.ts
+coverage/
+
+# Dev files
+.github/
+.vscode/
+.idea/
+
+# Other
+.env*
+*.log

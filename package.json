@@ -1,0 +1,126 @@
+{
+  "name": "mcp-oidc-provider",
+  "version": "0.1.0",
+  "description": "Framework-agnostic OIDC provider for MCP servers with pluggable identity providers",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./auth0": {
+      "import": "./dist/auth0/index.js",
+      "types": "./dist/auth0/index.d.ts"
+    },
+    "./express": {
+      "import": "./dist/adapters/express/index.js",
+      "types": "./dist/adapters/express/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "rimraf dist && tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "format": "prettier --write \"src/**/*.{ts,json}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,json}\"",
+    "type-check": "tsc --noEmit",
+    "prepare": "husky",
+    "prepublishOnly": "npm run build",
+    "semantic-release": "semantic-release"
+  },
+  "keywords": [
+    "mcp",
+    "oidc",
+    "oauth",
+    "oauth2",
+    "openid",
+    "openid-connect",
+    "authentication",
+    "authorization",
+    "model-context-protocol",
+    "express",
+    "framework-agnostic"
+  ],
+  "author": "Tigris Data",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tigrisdata/mcp-oidc-provider.git"
+  },
+  "homepage": "https://github.com/tigrisdata/mcp-oidc-provider#readme",
+  "bugs": {
+    "url": "https://github.com/tigrisdata/mcp-oidc-provider/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "jose": "^6.1.0",
+    "oidc-provider": "^9.5.2"
+  },
+  "release": {
+    "branches": [
+      "main"
+    ],
+    "plugins": [
+      "@semantic-release/commit-analyzer",
+      "@semantic-release/release-notes-generator",
+      "@semantic-release/changelog",
+      "@semantic-release/npm",
+      "@semantic-release/github"
+    ]
+  },
+  "commitlint": {
+    "extends": [
+      "@commitlint/config-conventional"
+    ]
+  },
+  "peerDependencies": {
+    "keyv": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "keyv": {
+      "optional": false
+    }
+  },
+  "optionalDependencies": {
+    "openid-client": "^6.8.1"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^20.1.0",
+    "@commitlint/config-conventional": "^20.0.0",
+    "@eslint/js": "^9.39.1",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/github": "^12.0.2",
+    "@semantic-release/npm": "^13.1.2",
+    "@semantic-release/release-notes-generator": "^14.1.0",
+    "@types/express": "^5.0.0",
+    "@types/express-session": "^1.18.0",
+    "@types/node": "^22.0.0",
+    "@types/oidc-provider": "^9.5.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "express": "^5.0.0",
+    "express-session": "^1.18.0",
+    "husky": "^9.1.7",
+    "keyv": "^5.5.3",
+    "prettier": "^3.0.0",
+    "rimraf": "^6.0.0",
+    "semantic-release": "^25.0.2",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.48.1",
+    "vitest": "^2.0.0"
+  }
+}
