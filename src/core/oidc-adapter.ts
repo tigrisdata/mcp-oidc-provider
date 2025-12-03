@@ -1,5 +1,5 @@
 import type { Adapter, AdapterPayload } from 'oidc-provider';
-import type { KeyValueStore } from '../types/storage.js';
+import { Keyv } from 'keyv';
 import type { Logger } from '../utils/logger.js';
 
 /**
@@ -8,17 +8,17 @@ import type { Logger } from '../utils/logger.js';
 export type OidcAdapterFactory = (name: string) => Adapter;
 
 /**
- * Create a factory function for OIDC adapters using a Keyv-compatible store.
+ * Create a factory function for OIDC adapters using a Keyv store.
  *
- * @param createStore - Function to create a namespaced store
+ * @param store - Keyv instance (underlying store is extracted for namespacing)
  * @param logger - Logger instance
  * @returns Adapter factory function for oidc-provider
  */
-export function createOidcAdapterFactory(
-  createStore: <T>(namespace: string, ttl?: number) => KeyValueStore<T>,
-  logger: Logger
-): OidcAdapterFactory {
-  return (name: string) => new KeyvOidcAdapter(name, createStore, logger);
+export function createOidcAdapterFactory(store: Keyv, logger: Logger): OidcAdapterFactory {
+  // Get the underlying store to create namespaced Keyv instances
+  const underlyingStore = store.opts?.store;
+
+  return (name: string) => new KeyvOidcAdapter(name, underlyingStore, logger);
 }
 
 /**
@@ -27,21 +27,23 @@ export function createOidcAdapterFactory(
  */
 class KeyvOidcAdapter implements Adapter {
   private name: string;
-  private store: KeyValueStore<AdapterPayload>;
-  private grantIdStore: KeyValueStore<string[]>;
+  private store: Keyv<AdapterPayload>;
+  private grantIdStore: Keyv<string[]>;
   private logger: Logger;
 
-  constructor(
-    name: string,
-    createStore: <T>(namespace: string, ttl?: number) => KeyValueStore<T>,
-    logger: Logger
-  ) {
+  constructor(name: string, underlyingStore: unknown, logger: Logger) {
     this.name = name;
     this.logger = logger;
-    // Main store for the data
-    this.store = createStore<AdapterPayload>(`oidc:${name}`);
-    // Secondary index for grantId lookups
-    this.grantIdStore = createStore<string[]>(`oidc:${name}:grantId`);
+
+    // Create namespaced Keyv instances
+    this.store = new Keyv<AdapterPayload>({
+      store: underlyingStore as Keyv['opts']['store'],
+      namespace: `oidc:${name}`,
+    });
+    this.grantIdStore = new Keyv<string[]>({
+      store: underlyingStore as Keyv['opts']['store'],
+      namespace: `oidc:${name}:grantId`,
+    });
   }
 
   /**

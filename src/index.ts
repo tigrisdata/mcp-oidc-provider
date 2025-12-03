@@ -5,22 +5,27 @@
  *
  * @example
  * ```typescript
- * import { createOidcProvider } from 'mcp-oidc-provider';
+ * import { Keyv } from 'keyv';
+ * import { setupMcpExpress } from 'mcp-oidc-provider/express';
  * import { Auth0Client } from 'mcp-oidc-provider/auth0';
- * import { createExpressAdapter } from 'mcp-oidc-provider/express';
  *
- * // Create the OIDC provider
- * const provider = createOidcProvider({
- *   issuer: 'https://your-server.com',
- *   idpClient: new Auth0Client({ ... }),
- *   storage: (namespace, ttl) => new Keyv({ namespace, ttl }),
- *   cookieSecrets: ['your-secret'],
+ * const { app, handleMcpRequest } = setupMcpExpress({
+ *   idpClient: new Auth0Client({
+ *     domain: process.env.AUTH0_DOMAIN,
+ *     clientId: process.env.AUTH0_CLIENT_ID,
+ *     clientSecret: process.env.AUTH0_CLIENT_SECRET,
+ *     redirectUri: `${BASE_URL}/oauth/callback`,
+ *   }),
+ *   store: new Keyv(),
+ *   baseUrl: 'https://your-server.com',
+ *   secret: process.env.SESSION_SECRET,
  * });
  *
- * // Create Express adapter
- * const { routes, providerCallback } = createExpressAdapter(provider);
- * app.use('/oauth', routes);
- * app.use('/', providerCallback());
+ * handleMcpRequest(async (req, res, user) => {
+ *   // Your MCP handler
+ * });
+ *
+ * app.listen(3000);
  * ```
  *
  * @packageDocumentation
@@ -61,9 +66,6 @@ export type {
   UserSession,
   SessionStore,
   InteractionSession,
-  // Storage types
-  KeyValueStore,
-  StoreFactory,
 } from './types/index.js';
 
 // Logger utilities

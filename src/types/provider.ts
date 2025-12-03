@@ -1,6 +1,6 @@
 import type Provider from 'oidc-provider';
+import type { Keyv } from 'keyv';
 import type { IdentityProviderClient } from './idp.js';
-import type { StoreFactory } from './storage.js';
 import type { SessionStore } from './session.js';
 import type { HttpContext } from './http.js';
 import type { Logger } from '../utils/logger.js';
@@ -15,8 +15,27 @@ export interface OidcProviderConfig {
   /** Identity provider client for upstream authentication */
   idpClient: IdentityProviderClient;
 
-  /** Storage factory for creating namespaced stores */
-  storage: StoreFactory;
+  /**
+   * Keyv instance for storage.
+   * Used for sessions, tokens, grants, and other OIDC data.
+   * Namespacing is handled internally.
+   *
+   * @example
+   * ```typescript
+   * // In-memory (development only)
+   * import { Keyv } from 'keyv';
+   * const store = new Keyv();
+   *
+   * // Redis (production)
+   * import KeyvRedis from '@keyv/redis';
+   * const store = new Keyv({ store: new KeyvRedis('redis://localhost:6379') });
+   *
+   * // Tigris
+   * import { KeyvTigris } from '@tigrisdata/keyv-tigris';
+   * const store = new Keyv({ store: new KeyvTigris() });
+   * ```
+   */
+  store: Keyv;
 
   /** Cookie signing secret(s) - use multiple for key rotation */
   cookieSecrets: string[];

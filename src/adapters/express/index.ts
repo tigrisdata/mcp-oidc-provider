@@ -1,3 +1,8 @@
+// Main setup function - the recommended way to use this package
+export { setupMcpExpress } from './setup.js';
+export type { McpExpressSetupOptions, McpExpressSetupResult, McpRequestHandler } from './setup.js';
+
+// Lower-level APIs for advanced use cases
 export {
   createExpressAdapter,
   createCompleteExpressRouter,

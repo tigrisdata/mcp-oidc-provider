@@ -6,6 +6,7 @@ import Provider, {
 } from 'oidc-provider';
 import { randomUUID } from 'node:crypto';
 import { jwtVerify, createRemoteJWKSet } from 'jose';
+import { Keyv } from 'keyv';
 
 import type {
   OidcProviderConfig,
@@ -36,6 +37,18 @@ import {
 } from './config.js';
 
 /**
+ * Create a KeyValueStore wrapper around a Keyv instance.
+ */
+function createKeyvStore<T>(keyv: Keyv): KeyValueStore<T> {
+  return {
+    get: (key: string) => keyv.get(key) as Promise<T | undefined>,
+    set: (key: string, value: T, ttl?: number) => keyv.set(key, value, ttl),
+    delete: (key: string) => keyv.delete(key),
+    clear: () => keyv.clear(),
+  };
+}
+
+/**
  * Create an OIDC provider instance.
  *
  * @param config - Provider configuration
@@ -43,13 +56,14 @@ import {
  *
  * @example
  * ```typescript
+ * import { Keyv } from 'keyv';
  * import { createOidcProvider } from 'mcp-oidc-provider';
  * import { Auth0Client } from 'mcp-oidc-provider/auth0';
  *
  * const provider = createOidcProvider({
  *   issuer: 'https://your-server.com',
  *   idpClient: new Auth0Client({ ... }),
- *   storage: (namespace, ttl) => new Keyv({ namespace, ttl }),
+ *   store: new Keyv(),
  *   cookieSecrets: ['your-secret'],
  * });
  * ```
@@ -59,15 +73,24 @@ export function createOidcProvider(config: OidcProviderConfig): OidcProvider {
   const scopes = config.scopes ?? DEFAULT_SCOPES;
   const allowedProtocols = config.allowedClientProtocols ?? DEFAULT_ALLOWED_CLIENT_PROTOCOLS;
 
+  // Get the underlying store from the Keyv instance
+  const underlyingStore = config.store.opts?.store;
+
+  // Create namespaced Keyv instances for different data types
+  const userSessionKeyv = new Keyv({
+    store: underlyingStore,
+    namespace: 'user-sessions',
+    ttl: DEFAULT_USER_SESSION_TTL_MS,
+  });
+  const interactionSessionKeyv = new Keyv({
+    store: underlyingStore,
+    namespace: 'interaction-sessions',
+    ttl: DEFAULT_INTERACTION_SESSION_TTL_MS,
+  });
+
   // Create stores
-  const userSessionStore = config.storage<UserSession>(
-    'user-sessions',
-    DEFAULT_USER_SESSION_TTL_MS
-  );
-  const interactionSessionStore = config.storage<InteractionSession>(
-    'interaction-sessions',
-    DEFAULT_INTERACTION_SESSION_TTL_MS
-  );
+  const userSessionStore = createKeyvStore<UserSession>(userSessionKeyv);
+  const interactionSessionStore = createKeyvStore<InteractionSession>(interactionSessionKeyv);
 
   // Create session store with extended methods
   const sessionStore = createExtendedSessionStore(userSessionStore);
@@ -143,7 +166,7 @@ function createProviderConfiguration(
 
     jwks,
 
-    adapter: createOidcAdapterFactory(config.storage, logger),
+    adapter: createOidcAdapterFactory(config.store, logger),
 
     clients: [],
 

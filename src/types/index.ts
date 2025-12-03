@@ -20,9 +20,6 @@ export type {
 // Session types
 export type { UserSession, SessionStore, InteractionSession } from './session.js';
 
-// Storage types
-export type { KeyValueStore, StoreFactory } from './storage.js';
-
 // Provider types
 export type {
   OidcProviderConfig,
