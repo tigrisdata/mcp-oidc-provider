@@ -86,9 +86,17 @@
     ]
   },
   "peerDependencies": {
+    "express": "^4.0.0 || ^5.0.0",
+    "express-session": "^1.18.0",
     "keyv": "^5.0.0"
   },
   "peerDependenciesMeta": {
+    "express": {
+      "optional": true
+    },
+    "express-session": {
+      "optional": true
+    },
     "keyv": {
       "optional": false
     }
