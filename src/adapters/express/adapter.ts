@@ -83,15 +83,25 @@ export interface ExpressAdapterResult {
 
 /**
  * OIDC provider route paths (endpoints handled by oidc-provider).
+ * These routes should NOT have their bodies parsed by upstream middleware
+ * as oidc-provider handles body parsing itself.
  */
 const PROVIDER_ROUTES = [
   '/authorize',
+  '/auth',
   '/token',
   '/jwks',
+  '/certs',
   '/me',
+  '/userinfo',
   '/register',
+  '/reg',
   '/introspect',
   '/revoke',
+  '/session',
+  '/end_session',
+  '/device',
+  '/pushed_authorization_request',
   '/.well-known/openid-configuration',
   '/.well-known/oauth-authorization-server',
 ];

@@ -4,12 +4,12 @@ Framework-agnostic OIDC provider for MCP (Model Context Protocol) servers with p
 
 ## Features
 
-- **Framework Agnostic**: Core implementation works with any Node.js web framework
 - **Pluggable Identity Providers**: Generic interface for any OIDC-compliant IdP
 - **Built-in Auth0 Support**: Ready-to-use Auth0 client implementation
 - **Express Adapter**: Full Express.js integration included
-- **Keyv Storage**: Compatible with any Keyv backend (Redis, MongoDB, Tigris, etc.)
-- **MCP Client Support**: Automatic handling of custom protocol URIs (cursor://, vscode://, windsurf://)
+- **MCP SDK Integration**: Works seamlessly with `@modelcontextprotocol/sdk`
+- **Dynamic Client Registration**: Automatic DCR support for MCP clients
+- **Keyv Storage**: Compatible with any Keyv backend (Tigris, Redis, MongoDB, etc.)
 - **TypeScript First**: Full type definitions included
 
 ## Installation
@@ -18,75 +18,105 @@ Framework-agnostic OIDC provider for MCP (Model Context Protocol) servers with p
 npm install mcp-oidc-provider keyv
 ```
 
-For Auth0 support:
+For Auth0 support (recommended):
 ```bash
 npm install mcp-oidc-provider keyv openid-client
 ```
 
 ## Quick Start
 
-### Basic Setup with Express and Auth0
+### Option 1: Standalone OIDC Server with MCP SDK (Recommended)
+
+This approach runs a separate OIDC server and uses the MCP SDK's `ProxyOAuthServerProvider` for your MCP server.
 
 ```typescript
 import express from 'express';
-import session from 'express-session';
-import Keyv from 'keyv';
-import { createOidcProvider } from 'mcp-oidc-provider';
+import { Keyv } from 'keyv';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { mcpAuthRouter, ProxyOAuthServerProvider, requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth';
+
+import { createOidcServer } from 'mcp-oidc-provider/express';
 import { Auth0Client } from 'mcp-oidc-provider/auth0';
-import {
-  createExpressAdapter,
-  createExpressAuthMiddleware,
-  KeyvSessionStore,
-} from 'mcp-oidc-provider/express';
+import { createMcpAuthProvider } from 'mcp-oidc-provider/mcp';
 
-const app = express();
+// Create a shared Keyv store
+const store = new Keyv();
 
-// Create a Keyv store factory
-const createStore = <T>(namespace: string, ttl?: number) => {
-  return new Keyv<T>({ namespace, ttl });
-};
-
-// Create Auth0 client
-const auth0Client = new Auth0Client({
-  domain: process.env.AUTH0_DOMAIN!,
-  clientId: process.env.AUTH0_CLIENT_ID!,
-  clientSecret: process.env.AUTH0_CLIENT_SECRET!,
-  redirectUri: `${process.env.BASE_URL}/oauth/callback`,
-  audience: process.env.AUTH0_AUDIENCE,
-});
-
-// Create OIDC provider
-const oidcProvider = createOidcProvider({
-  issuer: process.env.BASE_URL!,
-  idpClient: auth0Client,
-  storage: createStore,
-  cookieSecrets: [process.env.COOKIE_SECRET!],
-  isProduction: process.env.NODE_ENV === 'production',
-});
-
-// Setup Express session with Keyv store
-app.use(session({
-  store: new KeyvSessionStore(new Keyv({ namespace: 'sessions' })),
+// 1. Create and start the OIDC server
+const oidcServer = createOidcServer({
+  idpClient: new Auth0Client({
+    domain: process.env.AUTH0_DOMAIN!,
+    clientId: process.env.AUTH0_CLIENT_ID!,
+    clientSecret: process.env.AUTH0_CLIENT_SECRET!,
+    redirectUri: 'http://localhost:4001/oauth/callback',
+  }),
+  store,
   secret: process.env.SESSION_SECRET!,
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-  },
+  port: 4001,
+  baseUrl: 'http://localhost:4001',
+});
+
+await oidcServer.start();
+console.log(`OIDC server running at ${oidcServer.baseUrl}`);
+
+// 2. Create MCP server with SDK auth
+const mcpApp = express();
+const MCP_BASE_URL = 'http://localhost:3001';
+
+// Get config for ProxyOAuthServerProvider
+const { proxyOAuthServerProviderConfig, mcpRoutes, resourceMetadataUrl } = createMcpAuthProvider({
+  oidcServer,
+  store,
+  mcpServerBaseUrl: MCP_BASE_URL,
+});
+
+// Create auth provider
+const authProvider = new ProxyOAuthServerProvider(proxyOAuthServerProviderConfig);
+
+// Mount routes (includes CORS, health check, and protected resource metadata)
+mcpApp.use(mcpRoutes);
+
+// Install MCP auth router
+mcpApp.use(mcpAuthRouter({
+  provider: authProvider,
+  issuerUrl: new URL(oidcServer.baseUrl),
+  baseUrl: new URL(MCP_BASE_URL),
 }));
 
-// Create Express adapter
-const { routes, providerCallback } = createExpressAdapter(oidcProvider);
+// Protected MCP endpoint
+mcpApp.use(express.json());
+mcpApp.post('/mcp', requireBearerAuth({ verifier: authProvider, resourceMetadataUrl }), async (req, res) => {
+  // Your MCP handler here
+});
 
-// Mount OAuth routes
-app.use('/oauth', routes);
-app.use('/', providerCallback());
+mcpApp.listen(3001);
+```
 
-// Protected routes with auth middleware
-const authMiddleware = createExpressAuthMiddleware(oidcProvider);
-app.use('/api', authMiddleware, (req, res) => {
-  res.json({ user: req.user });
+### Option 2: All-in-One Setup
+
+For simpler deployments where OIDC and MCP run in the same Express app:
+
+```typescript
+import { Keyv } from 'keyv';
+import { setupMcpExpress } from 'mcp-oidc-provider/express';
+import { Auth0Client } from 'mcp-oidc-provider/auth0';
+
+const { app, handleMcpRequest } = setupMcpExpress({
+  idpClient: new Auth0Client({
+    domain: process.env.AUTH0_DOMAIN!,
+    clientId: process.env.AUTH0_CLIENT_ID!,
+    clientSecret: process.env.AUTH0_CLIENT_SECRET!,
+    redirectUri: `${process.env.BASE_URL}/oauth/callback`,
+  }),
+  store: new Keyv(),
+  baseUrl: process.env.BASE_URL!,
+  secret: process.env.SESSION_SECRET!,
+});
+
+// Handle MCP requests with authenticated user
+handleMcpRequest(async (req, res, user) => {
+  console.log('Authenticated user:', user.claims.email);
+  // Your MCP server logic here
 });
 
 app.listen(3000);
@@ -96,17 +126,19 @@ app.listen(3000);
 
 ### Main Package (`mcp-oidc-provider`)
 
+Core types and utilities:
+
 ```typescript
 import {
-  createOidcProvider,
-  createSessionStore,
-  createExtendedSessionStore,
-  createConsoleLogger,
   // Types
-  type OidcProviderConfig,
-  type OidcProvider,
   type IdentityProviderClient,
-  // ... and more
+  type AuthorizationParams,
+  type TokenSet,
+  type UserClaims,
+  type OidcProviderConfig,
+  // Utilities
+  createConsoleLogger,
+  generateJwks,
 } from 'mcp-oidc-provider';
 ```
 
@@ -120,31 +152,55 @@ import { Auth0Client, type Auth0Config } from 'mcp-oidc-provider/auth0';
 
 ```typescript
 import {
+  // High-level APIs
+  createOidcServer,      // Standalone OIDC server
+  setupMcpExpress,       // All-in-one OIDC + MCP setup
+
+  // Lower-level APIs
   createExpressAdapter,
-  createCompleteExpressRouter,
   createExpressAuthMiddleware,
-  createOptionalAuthMiddleware,
   KeyvSessionStore,
+  createMcpCorsMiddleware,
 } from 'mcp-oidc-provider/express';
+```
+
+### MCP Integration (`mcp-oidc-provider/mcp`)
+
+```typescript
+import {
+  createMcpAuthProvider,
+  InvalidTokenError,
+  type McpAuthProviderOptions,
+  type McpAuthProviderResult,
+  type ProxyOAuthServerProviderConfig,
+} from 'mcp-oidc-provider/mcp';
 ```
 
 ## Configuration
 
-### OidcProviderConfig
+### createOidcServer Options
 
 | Option | Type | Required | Description |
 |--------|------|----------|-------------|
-| `issuer` | `string` | Yes | Your server's base URL |
-| `idpClient` | `IdentityProviderClient` | Yes | Identity provider client instance |
-| `storage` | `StoreFactory` | Yes | Factory function for creating stores |
-| `cookieSecrets` | `string[]` | Yes | Secrets for signing cookies |
-| `callbackPath` | `string` | No | IdP callback path (default: '/callback') |
-| `ttl` | `object` | No | Token TTL configuration |
-| `scopes` | `string[]` | No | Supported OAuth scopes |
+| `idpClient` | `IdentityProviderClient` | Yes | Identity provider client (e.g., Auth0Client) |
+| `store` | `Keyv` | Yes | Keyv instance for storage |
+| `secret` | `string` | Yes | Secret for signing cookies/sessions |
+| `port` | `number` | No | Port to listen on (default: 4000) |
+| `baseUrl` | `string` | No | Base URL of the OIDC server |
+| `jwks` | `JWKS` | No | Custom JWKS for signing tokens |
 | `isProduction` | `boolean` | No | Production mode flag |
-| `allowedClientProtocols` | `string[]` | No | Allowed custom URI protocols |
-| `claims` | `object` | No | Custom claims configuration |
-| `logger` | `Logger` | No | Custom logger instance |
+| `sessionMaxAge` | `number` | No | Session max age in ms (default: 30 days) |
+| `onListen` | `function` | No | Callback when server starts |
+
+### createMcpAuthProvider Options
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `oidcServer` | `OidcServerResult` | Yes | OIDC server from createOidcServer |
+| `store` | `Keyv` | Yes | Same Keyv instance used by OIDC server |
+| `mcpServerBaseUrl` | `string` | Yes | Base URL of your MCP server |
+| `mcpEndpointPath` | `string` | No | MCP endpoint path (default: '/mcp') |
+| `scopesSupported` | `string[]` | No | Supported OAuth scopes |
 
 ### Auth0Config
 
@@ -199,101 +255,54 @@ The package uses Keyv for storage abstraction. You can use any Keyv-compatible b
 ### In-Memory (Development)
 
 ```typescript
-import Keyv from 'keyv';
-
-const createStore = <T>(namespace: string, ttl?: number) => {
-  return new Keyv<T>({ namespace, ttl });
-};
+import { Keyv } from 'keyv';
+const store = new Keyv();
 ```
 
 ### Redis
 
 ```typescript
-import Keyv from 'keyv';
+import { Keyv } from 'keyv';
 import KeyvRedis from '@keyv/redis';
 
-const createStore = <T>(namespace: string, ttl?: number) => {
-  return new Keyv<T>({
-    store: new KeyvRedis('redis://localhost:6379'),
-    namespace,
-    ttl,
-  });
-};
+const store = new Keyv({
+  store: new KeyvRedis('redis://localhost:6379'),
+});
 ```
 
 ### Tigris
 
 ```typescript
-import Keyv from 'keyv';
+import { Keyv } from 'keyv';
 import { KeyvTigris } from '@tigrisdata/keyv-tigris';
 
-const createStore = <T>(namespace: string, ttl?: number) => {
-  return new Keyv<T>({
-    store: new KeyvTigris({ logicalDatabase: 'my-app' }),
-    namespace,
-    ttl,
-  });
-};
+const store = new Keyv({
+  store: new KeyvTigris(),
+});
 ```
+
+## OIDC Endpoints
+
+When using `createOidcServer`, the following endpoints are available:
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /authorize` | Authorization endpoint |
+| `POST /token` | Token endpoint |
+| `POST /token/revocation` | Token revocation endpoint |
+| `POST /register` | Dynamic Client Registration |
+| `GET /jwks` | JSON Web Key Set |
+| `GET /.well-known/openid-configuration` | OIDC Discovery |
+| `GET /oauth/callback` | IdP callback handler |
+| `GET /health` | Health check |
 
 ## MCP Client Support
 
-The provider automatically allows custom protocol URIs for known MCP clients:
+The provider automatically handles Dynamic Client Registration for MCP clients, including support for custom protocol URIs:
 
 - `cursor://` - Cursor IDE
 - `vscode://` - VS Code
 - `windsurf://` - Windsurf
-
-To add additional protocols:
-
-```typescript
-const provider = createOidcProvider({
-  // ...
-  allowedClientProtocols: ['cursor://', 'vscode://', 'windsurf://', 'myapp://'],
-});
-```
-
-## API Reference
-
-### createOidcProvider(config)
-
-Creates a new OIDC provider instance.
-
-Returns: `OidcProvider`
-
-```typescript
-interface OidcProvider {
-  provider: Provider;              // Underlying oidc-provider instance
-  sessionStore: SessionStore;      // User session store
-  handleInteraction(ctx): Promise<void>;  // Handle login/consent flow
-  handleCallback(ctx): Promise<void>;     // Handle IdP callback
-  validateToken(token): Promise<TokenValidationResult>;  // Validate access token
-  refreshIdpTokens(accountId): Promise<boolean>;         // Refresh IdP tokens
-}
-```
-
-### createExpressAdapter(provider, options?)
-
-Creates an Express adapter for the OIDC provider.
-
-Returns: `ExpressAdapterResult`
-
-```typescript
-interface ExpressAdapterResult {
-  routes: Router;                           // Custom OAuth routes
-  providerCallback: () => RequestHandler;   // OIDC provider callback
-  isProviderRoute: (path) => boolean;       // Check if path is provider route
-}
-```
-
-### createExpressAuthMiddleware(provider, options?)
-
-Creates an Express middleware for token validation.
-
-Options:
-- `autoRefresh`: Auto-refresh IdP tokens (default: true)
-- `refreshBufferSeconds`: Seconds before expiry to trigger refresh (default: 300)
-- `logger`: Custom logger instance
 
 ## License
 

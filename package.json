@@ -1,7 +1,7 @@
 {
   "name": "mcp-oidc-provider",
-  "version": "0.1.0",
-  "description": "Framework-agnostic OIDC provider for MCP servers with pluggable identity providers",
+  "version": "1.0.0-beta.1",
+  "description": "OIDC provider for MCP servers with pluggable identity providers",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -52,8 +52,7 @@
     "authentication",
     "authorization",
     "model-context-protocol",
-    "express",
-    "framework-agnostic"
+    "express"
   ],
   "author": "Tigris Data",
   "license": "MIT",

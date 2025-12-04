@@ -3,29 +3,36 @@
  *
  * Framework-agnostic OIDC provider for MCP servers with pluggable identity providers.
  *
- * @example
+ * @example Standalone OIDC Server with MCP SDK
  * ```typescript
  * import { Keyv } from 'keyv';
- * import { setupMcpExpress } from 'mcp-oidc-provider/express';
+ * import { createOidcServer } from 'mcp-oidc-provider/express';
+ * import { createMcpAuthProvider } from 'mcp-oidc-provider/mcp';
  * import { Auth0Client } from 'mcp-oidc-provider/auth0';
  *
- * const { app, handleMcpRequest } = setupMcpExpress({
+ * const store = new Keyv();
+ *
+ * // Create OIDC server
+ * const oidcServer = createOidcServer({
  *   idpClient: new Auth0Client({
- *     domain: process.env.AUTH0_DOMAIN,
- *     clientId: process.env.AUTH0_CLIENT_ID,
- *     clientSecret: process.env.AUTH0_CLIENT_SECRET,
- *     redirectUri: `${BASE_URL}/oauth/callback`,
+ *     domain: process.env.AUTH0_DOMAIN!,
+ *     clientId: process.env.AUTH0_CLIENT_ID!,
+ *     clientSecret: process.env.AUTH0_CLIENT_SECRET!,
+ *     redirectUri: 'http://localhost:4001/oauth/callback',
  *   }),
- *   store: new Keyv(),
- *   baseUrl: 'https://your-server.com',
- *   secret: process.env.SESSION_SECRET,
+ *   store,
+ *   secret: process.env.SESSION_SECRET!,
+ *   port: 4001,
  * });
  *
- * handleMcpRequest(async (req, res, user) => {
- *   // Your MCP handler
- * });
+ * await oidcServer.start();
  *
- * app.listen(3000);
+ * // Create MCP auth provider for SDK integration
+ * const { proxyOAuthServerProviderConfig, mcpRoutes } = createMcpAuthProvider({
+ *   oidcServer,
+ *   store,
+ *   mcpServerBaseUrl: 'http://localhost:3001',
+ * });
  * ```
  *
  * @packageDocumentation
