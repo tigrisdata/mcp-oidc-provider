@@ -9,6 +9,7 @@ import { Router, type Request, type Response } from 'express';
 import { Keyv } from 'keyv';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { OidcServerResult } from '../adapters/express/server.js';
+import { createMcpCorsMiddleware } from '../adapters/express/cors.js';
 
 /**
  * Client information stored by oidc-provider.
@@ -55,7 +56,7 @@ export interface McpAuthProviderOptions {
 
   /**
    * The base URL of the MCP server (resource server).
-   * Used for constructing the protected resource metadata.
+   * Used for constructing the protected resource metadata and CORS.
    */
   mcpServerBaseUrl: string;
 
@@ -104,15 +105,15 @@ export interface ProxyOAuthServerProviderConfig {
 export interface McpAuthProviderResult {
   /**
    * Configuration for ProxyOAuthServerProvider.
-   * Pass this directly to: new ProxyOAuthServerProvider(config)
+   * Pass this directly to: new ProxyOAuthServerProvider(proxyOAuthServerProviderConfig)
    */
-  config: ProxyOAuthServerProviderConfig;
+  proxyOAuthServerProviderConfig: ProxyOAuthServerProviderConfig;
 
   /**
-   * Express router that serves OAuth 2.0 Protected Resource Metadata (RFC 9728).
-   * Mount this on your MCP server: app.use(router)
+   * Express router that serves CORS, health check, and OAuth 2.0 Protected Resource Metadata (RFC 9728).
+   * Mount this on your MCP server: app.use(mcpRoutes)
    */
-  router: Router;
+  mcpRoutes: Router;
 
   /**
    * The URL of the protected resource metadata endpoint.
@@ -149,17 +150,17 @@ export class InvalidTokenError extends Error {
  * const oidcServer = createOidcServer({ ... });
  * await oidcServer.start();
  *
- * const { config, router, resourceMetadataUrl } = createMcpAuthProvider({
+ * const { proxyOAuthServerProviderConfig, mcpRoutes, resourceMetadataUrl } = createMcpAuthProvider({
  *   oidcServer,
  *   store,
  *   mcpServerBaseUrl: 'http://localhost:3001',
  * });
  *
  * // Create the auth provider directly with the config
- * const authProvider = new ProxyOAuthServerProvider(config);
+ * const authProvider = new ProxyOAuthServerProvider(proxyOAuthServerProviderConfig);
  *
- * // Mount the router for protected resource metadata
- * app.use(router);
+ * // Mount the routes (includes CORS, /health, /.well-known/oauth-protected-resource)
+ * app.use(mcpRoutes);
  *
  * // Use resourceMetadataUrl in requireBearerAuth
  * app.post('/mcp', requireBearerAuth({ verifier: authProvider, resourceMetadataUrl }), ...);
@@ -224,8 +225,16 @@ export function createMcpAuthProvider(options: McpAuthProviderOptions): McpAuthP
     },
   };
 
-  // Create router for protected resource metadata (RFC 9728)
+  // Create router for protected resource metadata (RFC 9728) and middleware
   const router = Router();
+
+  // CORS middleware for MCP clients (includes MCP Inspector origin by default)
+  router.use(createMcpCorsMiddleware({ baseUrl: mcpServerBaseUrl }));
+
+  // Health check endpoint
+  router.get('/health', (_req: Request, res: Response) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
 
   // OAuth 2.0 Protected Resource Metadata (RFC 9728)
   // This endpoint tells clients how to authenticate with this resource server
@@ -241,8 +250,8 @@ export function createMcpAuthProvider(options: McpAuthProviderOptions): McpAuthP
   const resourceMetadataUrl = `${mcpServerBaseUrl}/.well-known/oauth-protected-resource`;
 
   return {
-    config,
-    router,
+    proxyOAuthServerProviderConfig: config,
+    mcpRoutes: router,
     resourceMetadataUrl,
   };
 }
