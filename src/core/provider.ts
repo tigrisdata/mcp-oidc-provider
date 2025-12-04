@@ -132,7 +132,7 @@ export function createOidcProvider(config: OidcProviderConfig): OidcProvider {
     },
 
     async validateToken(token: string): Promise<TokenValidationResult> {
-      return validateAccessToken(token, provider, config.issuer, JWKS, sessionStore, logger);
+      return validateAccessToken(token, provider, config, JWKS, sessionStore, logger);
     },
 
     async refreshIdpTokens(accountId: string): Promise<boolean> {
@@ -196,16 +196,14 @@ function createProviderConfiguration(
             if (info) return info;
           }
 
-          // Default: allow MCP resources
-          if (resourceIndicator.includes('/mcp')) {
-            return {
-              scope: scopes.join(' '),
-              audience: resourceIndicator,
-              accessTokenTTL: ttl.AccessToken,
-              accessTokenFormat: 'jwt' as const,
-            };
-          }
-          throw new Error(`Unknown resource indicator: ${resourceIndicator}`);
+          // Default: allow any resource (MCP servers can be at any path)
+          // Common patterns: /mcp, /, /api, etc.
+          return {
+            scope: scopes.join(' '),
+            audience: resourceIndicator,
+            accessTokenTTL: ttl.AccessToken,
+            accessTokenFormat: 'jwt' as const,
+          };
         },
       },
     },
@@ -493,6 +491,7 @@ async function handleCallback(
         accessToken: tokenSet.accessToken ?? '',
         idToken: tokenSet.idToken ?? '',
         refreshToken: tokenSet.refreshToken ?? '',
+        expiresAt: tokenSet.expiresIn ? Date.now() + tokenSet.expiresIn * 1000 : undefined,
       },
       customData,
     };
@@ -523,11 +522,12 @@ async function handleCallback(
 
 /**
  * Validate an access token and return the authenticated user.
+ * Automatically refreshes IdP tokens if they are expired or about to expire.
  */
 async function validateAccessToken(
   token: string,
   provider: Provider,
-  issuerUrl: string,
+  config: OidcProviderConfig,
   JWKS: ReturnType<typeof createRemoteJWKSet>,
   sessionStore: ExtendedSessionStore,
   logger: Logger
@@ -540,7 +540,7 @@ async function validateAccessToken(
       // JWT token - verify and decode
       try {
         const { payload } = await jwtVerify(token, JWKS, {
-          issuer: issuerUrl,
+          issuer: config.issuer,
           typ: 'at+jwt',
         });
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -567,9 +567,21 @@ async function validateAccessToken(
     }
 
     // Get the user session
-    const userSession = await sessionStore.get(accountId);
+    let userSession = await sessionStore.get(accountId);
     if (!userSession) {
       return { valid: false, error: 'User session not found' };
+    }
+
+    // Check if IdP tokens need refreshing and refresh them automatically
+    if (isIdpTokenExpired(userSession)) {
+      logger.info('IdP tokens expired, attempting automatic refresh', { accountId });
+      const refreshed = await refreshIdpTokensForSession(accountId, config, sessionStore, logger);
+      if (refreshed) {
+        // Re-fetch the session to get the updated tokens
+        userSession = (await sessionStore.get(accountId)) ?? userSession;
+      } else {
+        logger.warn('IdP token refresh failed, returning stale tokens', { accountId });
+      }
     }
 
     const user: AuthenticatedUser = {
@@ -585,6 +597,22 @@ async function validateAccessToken(
     logger.error('Token validation error', error);
     return { valid: false, error: 'Token validation failed' };
   }
+}
+
+/** Refresh buffer - refresh tokens 60 seconds before expiry */
+const TOKEN_REFRESH_BUFFER_MS = 60 * 1000;
+
+/**
+ * Check if IdP tokens need refreshing.
+ */
+function isIdpTokenExpired(userSession: UserSession): boolean {
+  const expiresAt = userSession.tokenSet.expiresAt;
+  if (!expiresAt) {
+    // No expiry info - assume valid
+    return false;
+  }
+  // Refresh if expired or expiring within the buffer period
+  return Date.now() >= expiresAt - TOKEN_REFRESH_BUFFER_MS;
 }
 
 /**
@@ -608,6 +636,7 @@ async function refreshIdpTokensForSession(
       accessToken: newTokenSet.accessToken,
       idToken: newTokenSet.idToken ?? userSession.tokenSet.idToken,
       refreshToken: newTokenSet.refreshToken ?? userSession.tokenSet.refreshToken,
+      expiresAt: newTokenSet.expiresIn ? Date.now() + newTokenSet.expiresIn * 1000 : undefined,
     });
 
     logger.info('IdP tokens refreshed successfully', { accountId });

@@ -1,6 +1,10 @@
-// Main setup function - the recommended way to use this package
+// Integrated setup - OIDC + MCP in one Express app
 export { setupMcpExpress } from './setup.js';
 export type { McpExpressSetupOptions, McpExpressSetupResult, McpRequestHandler } from './setup.js';
+
+// Standalone OIDC server - use with MCP SDK's ProxyOAuthServerProvider
+export { createOidcServer } from './server.js';
+export type { OidcServerOptions, OidcServerResult } from './server.js';
 
 // Lower-level APIs for advanced use cases
 export {

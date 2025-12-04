@@ -17,6 +17,10 @@
     "./express": {
       "import": "./dist/adapters/express/index.js",
       "types": "./dist/adapters/express/index.d.ts"
+    },
+    "./mcp": {
+      "import": "./dist/mcp/index.js",
+      "types": "./dist/mcp/index.d.ts"
     }
   },
   "files": [

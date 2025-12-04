@@ -17,6 +17,8 @@ export interface UserSession {
     idToken: string;
     /** Refresh token for obtaining new access tokens */
     refreshToken: string;
+    /** Unix timestamp (ms) when the access token expires */
+    expiresAt?: number;
   };
   /** Custom data extracted from IdP claims (e.g., organizations, roles) */
   customData?: Record<string, unknown>;
