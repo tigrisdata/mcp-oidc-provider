@@ -73,6 +73,7 @@
   },
   "release": {
     "branches": [
+      "release",
       {
         "name": "main",
         "prerelease": "beta"
