@@ -9,7 +9,6 @@ permissions:
   contents: write
   issues: write
   pull-requests: write
-  id-token: write
 
 jobs:
   release:
@@ -39,8 +38,16 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Verify git state
+        run: |
+          echo "Current branch: $(git branch --show-current)"
+          echo "Remote branches:"
+          git branch -r
+          echo "Git log:"
+          git log --oneline -5
+
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npx semantic-release
+        run: npx semantic-release --debug
