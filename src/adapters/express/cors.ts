@@ -211,3 +211,90 @@ export function getMcpCorsOptions(baseUrl?: string): {
     maxAge: 86400,
   };
 }
+
+/**
+ * Health check response interface.
+ */
+export interface HealthCheckResponse {
+  status: 'ok' | 'error';
+  timestamp: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Health check options.
+ */
+export interface McpHealthOptions {
+  /**
+   * Path for the health check endpoint.
+   * Default: '/health'
+   */
+  path?: string;
+
+  /**
+   * Custom health check function. If provided, it will be called
+   * and its result merged with the default response.
+   * Return an object with additional health info, or throw an error
+   * to indicate the service is unhealthy.
+   */
+  check?: () => Promise<Record<string, unknown>> | Record<string, unknown>;
+}
+
+/**
+ * Create a health check endpoint middleware for MCP servers.
+ *
+ * @param options - Health check configuration options
+ * @returns Express middleware function
+ *
+ * @example
+ * ```typescript
+ * import express from 'express';
+ * import { createMcpHealthMiddleware } from 'mcp-oidc-provider/express';
+ *
+ * const app = express();
+ *
+ * // Basic usage - responds on /health
+ * app.use(createMcpHealthMiddleware());
+ *
+ * // Custom path
+ * app.use(createMcpHealthMiddleware({ path: '/healthz' }));
+ *
+ * // With custom health check
+ * app.use(createMcpHealthMiddleware({
+ *   check: async () => ({
+ *     database: 'connected',
+ *     version: '1.0.0',
+ *   }),
+ * }));
+ * ```
+ */
+export function createMcpHealthMiddleware(options?: McpHealthOptions): RequestHandler {
+  const path = options?.path ?? '/health';
+
+  return async (req, res, next) => {
+    if (req.path !== path || req.method !== 'GET') {
+      next();
+      return;
+    }
+
+    try {
+      const response: HealthCheckResponse = {
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+      };
+
+      if (options?.check) {
+        const customData = await options.check();
+        Object.assign(response, customData);
+      }
+
+      res.json(response);
+    } catch (error) {
+      res.status(503).json({
+        status: 'error',
+        timestamp: new Date().toISOString(),
+        error: error instanceof Error ? error.message : 'Health check failed',
+      });
+    }
+  };
+}

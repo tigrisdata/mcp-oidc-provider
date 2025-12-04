@@ -24,9 +24,10 @@ export { KeyvSessionStore } from './session-store.js';
 export {
   createMcpCorsMiddleware,
   getMcpCorsOptions,
+  createMcpHealthMiddleware,
   MCP_SESSION_ID_HEADER,
   MCP_INSPECTOR_ORIGIN,
   DEFAULT_MCP_ALLOWED_HEADERS,
   DEFAULT_MCP_EXPOSED_HEADERS,
 } from './cors.js';
-export type { McpCorsOptions } from './cors.js';
+export type { McpCorsOptions, McpHealthOptions, HealthCheckResponse } from './cors.js';
