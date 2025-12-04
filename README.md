@@ -27,7 +27,7 @@ npm install mcp-oidc-provider keyv openid-client
 
 ### Option 1: Standalone OIDC Server with MCP SDK (Recommended)
 
-This approach runs a separate OIDC server and uses the MCP SDK's `ProxyOAuthServerProvider` for your MCP server.
+This approach runs a separate OIDC server and you can use it in MCP SDK's `ProxyOAuthServerProvider` config. See the [standalone-oidc example](./example/standalone-oidc).
 
 ```typescript
 import express from 'express';
@@ -94,7 +94,7 @@ mcpApp.listen(3001);
 
 ### Option 2: All-in-One Setup
 
-For simpler deployments where OIDC and MCP run in the same Express app:
+For simpler deployments where OIDC and MCP run in the same Express app. See the [express-oauth example](./example/express-oauth).
 
 ```typescript
 import { Keyv } from 'keyv';
@@ -250,31 +250,32 @@ class MyIdpClient implements IdentityProviderClient {
 
 ## Storage Backends
 
-The package uses Keyv for storage abstraction. You can use any Keyv-compatible backend:
+The package uses [Keyv](https://keyv.org/) for storage abstraction. The store is used to persist:
 
-### In-Memory (Development)
+- **OAuth Clients** - Dynamically registered client applications (via DCR)
+- **Authorization Codes** - Short-lived codes exchanged for tokens
+- **Access Tokens** - Tokens used to authenticate API requests
+- **Refresh Tokens** - Long-lived tokens used to obtain new access tokens
+- **User Sessions** - Authenticated user information and IdP tokens
+- **Interaction Sessions** - OAuth flow state (PKCE, nonce, redirect URIs)
+- **Grants** - User consent records for client applications
+
+You can use any Keyv-compatible backend. For production, use a persistent store like Redis or Tigris.
+
+### In-Memory (Development Only)
 
 ```typescript
 import { Keyv } from 'keyv';
 const store = new Keyv();
 ```
 
-### Redis
+> **Warning**: In-memory storage loses all data on restart and is not shared across server instances. Do not use in production or distributed deployments.
+
+### [Tigris](https://www.npmjs.com/package/keyv-tigris) (Recommended for Production)
 
 ```typescript
 import { Keyv } from 'keyv';
-import KeyvRedis from '@keyv/redis';
-
-const store = new Keyv({
-  store: new KeyvRedis('redis://localhost:6379'),
-});
-```
-
-### Tigris
-
-```typescript
-import { Keyv } from 'keyv';
-import { KeyvTigris } from '@tigrisdata/keyv-tigris';
+import { KeyvTigris } from 'keyv-tigris';
 
 const store = new Keyv({
   store: new KeyvTigris(),
