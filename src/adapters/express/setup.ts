@@ -83,6 +83,19 @@ export interface McpExpressSetupOptions {
    * Useful for request logging, etc.
    */
   customMiddleware?: RequestHandler[];
+
+  /**
+   * Scopes to request from the upstream identity provider.
+   * Some IdPs (like Clerk) don't support all scopes.
+   * Default: 'openid email profile offline_access'
+   *
+   * @example
+   * ```typescript
+   * // For Clerk (doesn't support offline_access)
+   * idpScopes: 'openid email profile'
+   * ```
+   */
+  idpScopes?: string;
 }
 
 /**
@@ -178,6 +191,7 @@ export function setupMcpExpress(options: McpExpressSetupOptions): McpExpressSetu
     sessionMaxAge = 30 * 24 * 60 * 60 * 1000, // 30 days
     additionalCorsOrigins,
     customMiddleware = [],
+    idpScopes,
   } = options;
 
   // Create Express app
@@ -192,6 +206,7 @@ export function setupMcpExpress(options: McpExpressSetupOptions): McpExpressSetu
     cookieSecrets: [secret],
     isProduction,
     jwks,
+    idpScopes,
   });
 
   // Create CORS middleware
