@@ -18,62 +18,20 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
 import { ProxyOAuthServerProvider } from '@modelcontextprotocol/sdk/server/auth/providers/proxyProvider.js';
 import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';
-
-import { createOidcServer } from 'mcp-oidc-provider/express';
-import { Auth0Client } from 'mcp-oidc-provider/auth0';
 import { createMcpAuthProvider } from 'mcp-oidc-provider/mcp';
 
 dotenv.config();
 
 const OIDC_PORT = process.env['OIDC_PORT'] ? parseInt(process.env['OIDC_PORT'], 10) : 4001;
-const MCP_PORT = process.env['MCP_PORT'] ? parseInt(process.env['MCP_PORT'], 10) : 3001;
 const OIDC_BASE_URL = process.env['OIDC_BASE_URL'] ?? `http://localhost:${OIDC_PORT}`;
+const MCP_PORT = process.env['MCP_PORT'] ? parseInt(process.env['MCP_PORT'], 10) : 3001;
 const MCP_BASE_URL = process.env['MCP_BASE_URL'] ?? `http://localhost:${MCP_PORT}`;
-const SECRET = process.env['SESSION_SECRET'] ?? 'dev-secret-change-me';
-
-// Validate Auth0 config
-if (
-  !process.env['AUTH0_DOMAIN'] ||
-  !process.env['AUTH0_CLIENT_ID'] ||
-  !process.env['AUTH0_CLIENT_SECRET']
-) {
-  console.error('Error: Auth0 environment variables are required.');
-  console.error('Set AUTH0_DOMAIN, AUTH0_CLIENT_ID, and AUTH0_CLIENT_SECRET');
-  process.exit(1);
-}
 
 // Create Keyv store with Tigris backend
 const store = new Keyv({ store: new KeyvTigris() });
 
 // ============================================
-// 1. Start Standalone OIDC Server (port 4001)
-// ============================================
-const oidcServer = createOidcServer({
-  idpClient: new Auth0Client({
-    domain: process.env['AUTH0_DOMAIN'],
-    clientId: process.env['AUTH0_CLIENT_ID'],
-    clientSecret: process.env['AUTH0_CLIENT_SECRET'],
-    redirectUri: `${OIDC_BASE_URL}/oauth/callback`,
-    audience: process.env['AUTH0_AUDIENCE'],
-  }),
-  store,
-  secret: SECRET,
-  port: OIDC_PORT,
-  baseUrl: OIDC_BASE_URL,
-  isProduction: process.env['NODE_ENV'] === 'production',
-  onListen: (_port, baseUrl) => {
-    console.log(`OIDC Server running at ${baseUrl}`);
-    console.log(`  Authorization: ${baseUrl}/authorize`);
-    console.log(`  Token: ${baseUrl}/token`);
-    console.log(`  Registration: ${baseUrl}/register`);
-    console.log(`  JWKS: ${baseUrl}/jwks`);
-  },
-});
-
-await oidcServer.start();
-
-// ============================================
-// 2. Start MCP Server with SDK Auth (port 3001)
+// 2. Start MCP Server (port 3001)
 // ============================================
 const mcpApp = express();
 mcpApp.set('trust proxy', 1);
@@ -81,7 +39,7 @@ mcpApp.set('trust proxy', 1);
 // Create MCP auth provider - provides config for ProxyOAuthServerProvider + routes
 // The routes include CORS, health check, and protected resource metadata (RFC 9728)
 const { proxyOAuthServerProviderConfig, mcpRoutes, resourceMetadataUrl } = createMcpAuthProvider({
-  oidcServer,
+  oidcBaseUrl: OIDC_BASE_URL,
   store,
   mcpServerBaseUrl: MCP_BASE_URL,
 });
@@ -134,28 +92,11 @@ mcpApp.post(
       'whoami',
       { description: 'Get current user info from session' },
       async () => {
-        const tokenResult = await oidcServer.validateToken(authInfo.token);
-
-        if (!tokenResult.valid || !tokenResult.user) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify(
-                  { error: 'Invalid token', message: tokenResult.error },
-                  null,
-                  2
-                ),
-              },
-            ],
-          };
-        }
-
         return {
           content: [
             {
               type: 'text',
-              text: JSON.stringify({ tokenResult }, null, 2),
+              text: JSON.stringify({ authInfo }, null, 2),
             },
           ],
         };
