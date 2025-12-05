@@ -53,7 +53,7 @@ For production deployments, you need to generate and persist signing keys:
 
 ```bash
 # Generate JWKS (run once, save the output securely)
-npx tsx -e "import { generateJwks } from 'mcp-oidc-provider'; generateJwks().then(j => console.log(JSON.stringify(j)))"
+node -e "import('mcp-oidc-provider').then(m => m.generateJwks()).then(j => console.log(JSON.stringify(j)))"
 ```
 
 Set the output as the `JWKS` environment variable in your production environment. This ensures:
