@@ -72,7 +72,7 @@ const MCP_BASE_URL = 'http://localhost:3001';
 
 // Get config for ProxyOAuthServerProvider
 const { proxyOAuthServerProviderConfig, mcpRoutes, resourceMetadataUrl } = createMcpAuthProvider({
-  oidcServer,
+  oidcBaseUrl: oidcServer.baseUrl,
   store,
   mcpServerBaseUrl: MCP_BASE_URL,
 });
@@ -203,7 +203,7 @@ import {
 
 | Option | Type | Required | Description |
 |--------|------|----------|-------------|
-| `oidcServer` | `OidcServerResult` | Yes | OIDC server from createOidcServer |
+| `oidcBaseUrl` | `string` | Yes | Base URL of the OIDC server (e.g., 'http://localhost:4001') |
 | `store` | `Keyv` | Yes | Same Keyv instance used by OIDC server |
 | `mcpServerBaseUrl` | `string` | Yes | Base URL of your MCP server |
 | `mcpEndpointPath` | `string` | No | MCP endpoint path (default: '/mcp') |

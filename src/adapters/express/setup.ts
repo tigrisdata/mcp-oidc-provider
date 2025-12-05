@@ -8,6 +8,7 @@ import session from 'express-session';
 import { Keyv } from 'keyv';
 import type { IdentityProviderClient } from '../../types/idp.js';
 import type { AuthenticatedUser } from '../../types/provider.js';
+import type { KeyvLike } from '../../types/store.js';
 import type { JWKS } from '../../utils/jwks.js';
 import { createOidcProvider } from '../../core/provider.js';
 import { createExpressAdapter, isOidcProviderRoute } from './adapter.js';
@@ -27,6 +28,7 @@ export interface McpExpressSetupOptions {
   /**
    * Keyv instance for storage.
    * Used for sessions, tokens, grants, and other OIDC data.
+   * Any Keyv instance will work regardless of version.
    *
    * @example
    * ```typescript
@@ -39,7 +41,7 @@ export interface McpExpressSetupOptions {
    * const store = new Keyv({ store: new KeyvRedis('redis://localhost:6379') });
    * ```
    */
-  store: Keyv;
+  store: KeyvLike;
 
   /**
    * Base URL of the server.
