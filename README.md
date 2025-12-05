@@ -2,13 +2,13 @@
 
 OIDC provider for MCP (Model Context Protocol) servers with pluggable identity providers.
 
-Implementing a [remote hosted MCP server](https://support.claude.com/en/articles/11503834-building-custom-connectors-via-remote-mcp-servers) requires [implementing ](https://modelcontextprotocol.io/specification/draft/basic/authorization). In theory, this is very straight forward because modern applications either implement OAuth specs themselves or use a OAuth complaint IDP like Auth0 or Clerk etc. [Long story short](https://www.tigrisdata.com/blog/mcp-oauth/), using your own IDP as it is imposes many limitations.
+Implementing a [remote hosted MCP server](https://support.claude.com/en/articles/11503834-building-custom-connectors-via-remote-mcp-servers) requires [implementing MCP Authorization Protocol](https://modelcontextprotocol.io/specification/draft/basic/authorization). In theory, this is straightforward because modern applications either implement OAuth specs themselves or use an OAuth-compliant IdP like Auth0 or Clerk. [Long story short](https://www.tigrisdata.com/blog/mcp-oauth/), using your own IdP as-is imposes many limitations.
 
-This package takes care of those limitations for you so you can focus on implementing your tools, resources and prompts and not spend hours investigating why your implementation don't work for Cursor, or logs you out from Claude every x hours etc.
+This package takes care of those limitations for you so you can focus on implementing your tools, resources, and prompts instead of spending hours investigating why your implementation doesn't work with Cursor or logs you out from Claude every few hours.
 
-This package allows you to run either as a Standalone OIDC Server, or integrate the OIDC Server in your MCP implementation. It comes with support for Auth0 and Clerk but you can write the implementation of your own client and plug in seamlessly.
+This package allows you to run either in standalone mode or integrate it into your MCP implementation. It comes with support for Auth0 and Clerk, but you can write your own client implementation and plug it in seamlessly.
 
-It uses different packages under the hood to glue everything together
+It uses different packages under the hood to glue everything together:
 
 | Package           | Purpose                                                                                                                           |
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------------- |
