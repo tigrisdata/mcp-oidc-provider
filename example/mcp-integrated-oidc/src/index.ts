@@ -1,12 +1,12 @@
-import dotenv from 'dotenv';
-import { Keyv } from 'keyv';
-import { KeyvTigris } from '@tigrisdata/keyv-tigris';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { KeyvTigris } from '@tigrisdata/keyv-tigris';
+import dotenv from 'dotenv';
+import { Keyv } from 'keyv';
 import { type JWKS } from 'mcp-oidc-provider';
 import { setupMcpExpress } from 'mcp-oidc-provider/express';
+import { getIdpTokens } from 'mcp-oidc-provider/mcp';
 import { getIdentityProviderClientFromEnv } from './idp.js';
-import { getIdpTokens } from '../../../dist/mcp/index.js';
 
 // Load environment variables
 dotenv.config();
