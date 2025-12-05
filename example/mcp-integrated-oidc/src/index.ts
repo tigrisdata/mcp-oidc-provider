@@ -6,6 +6,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { type JWKS } from 'mcp-oidc-provider';
 import { setupMcpExpress } from 'mcp-oidc-provider/express';
 import { getIdentityProviderClientFromEnv } from './idp.js';
+import { getIdpTokens } from '../../../dist/mcp/index.js';
 
 // Load environment variables
 dotenv.config();
@@ -31,7 +32,15 @@ const { app, handleMcpRequest } = setupMcpExpress({
 });
 
 // Register MCP handler
-handleMcpRequest(async (req, res, user) => {
+handleMcpRequest(async (req, res) => {
+  // req.user is set by setupMcpExpress auth middleware
+  // For POST requests, auth is enforced so req.user is always defined
+  // For GET/DELETE requests (stateless), req.user is undefined
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
   const server = new McpServer(
     { name: 'example-mcp-server', version: '1.0.0' },
     { capabilities: { tools: {} } }
@@ -41,9 +50,12 @@ handleMcpRequest(async (req, res, user) => {
   server.registerTool(
     'whoami',
     { description: 'Get information about the currently authenticated user' },
-    async () => ({
-      content: [{ type: 'text', text: JSON.stringify(user, null, 2) }],
-    })
+    async () => {
+      const idpTokens = getIdpTokens(req.user);
+      return {
+        content: [{ type: 'text', text: JSON.stringify({ user: req.user, idpTokens }, null, 2) }],
+      };
+    }
   );
 
   const transport = new StreamableHTTPServerTransport({

@@ -120,9 +120,9 @@ const { app, handleMcpRequest } = setupMcpExpress({
   secret: process.env.SESSION_SECRET!,
 });
 
-// Handle MCP requests with authenticated user
-handleMcpRequest(async (req, res, user) => {
-  console.log('Authenticated user:', user.claims.email);
+// Handle MCP requests - user is available via req.user
+handleMcpRequest(async (req, res) => {
+  console.log('Authenticated user:', req.user?.claims.email);
   // Your MCP server logic here
 });
 
@@ -176,10 +176,14 @@ import {
 ```typescript
 import {
   createMcpAuthProvider,
+  getIdpTokens,
   InvalidTokenError,
   type McpAuthProviderOptions,
   type McpAuthProviderResult,
   type ProxyOAuthServerProviderConfig,
+  type ClientInfo,
+  type AuthInfo,
+  type IdpTokenSet,
 } from 'mcp-oidc-provider/mcp';
 ```
 
@@ -218,6 +222,50 @@ import {
 | `clientSecret` | `string` | Yes | OAuth client secret |
 | `redirectUri` | `string` | Yes | OAuth callback URL |
 | `audience` | `string` | No | API audience for access tokens |
+| `scopes` | `string` | No | OAuth scopes (default: 'openid email profile offline_access') |
+
+## Accessing IdP Tokens
+
+When you need to call upstream IdP APIs (e.g., Auth0 Management API, Clerk userinfo), use the `getIdpTokens` helper. It works with both authentication patterns:
+
+```typescript
+import { getIdpTokens } from 'mcp-oidc-provider/mcp';
+
+// Works with setupMcpExpress (req.user)
+handleMcpRequest(async (req, res) => {
+  const tokens = getIdpTokens(req.user);
+  if (tokens) {
+    const userInfo = await fetch('https://your-idp.com/userinfo', {
+      headers: { Authorization: `Bearer ${tokens.accessToken}` },
+    });
+  }
+});
+
+// Works with requireBearerAuth (req.auth) - standalone OIDC setup
+app.post('/mcp', requireBearerAuth({ verifier: authProvider }), async (req, res) => {
+  const tokens = getIdpTokens(req.auth);
+  if (tokens) {
+    // tokens.accessToken - IdP access token
+    // tokens.idToken - IdP ID token
+    // tokens.refreshToken - IdP refresh token
+  }
+});
+```
+
+The `IdpTokenSet` interface:
+
+```typescript
+interface IdpTokenSet {
+  accessToken: string;    // Access token for calling IdP APIs
+  idToken: string;        // ID token containing user identity
+  refreshToken: string;   // Refresh token for obtaining new access tokens
+  expiresAt?: number;     // Unix timestamp when access token expires
+}
+```
+
+You can also access tokens directly if preferred:
+- `req.user.tokenSet` (with `setupMcpExpress`)
+- `req.auth.extra.idpTokens` (with `requireBearerAuth`)
 
 ## Custom Identity Provider
 
@@ -227,8 +275,9 @@ Implement the `IdentityProviderClient` interface to support any OIDC-compliant i
 import type { IdentityProviderClient, AuthorizationParams, TokenSet, UserClaims } from 'mcp-oidc-provider';
 
 class MyIdpClient implements IdentityProviderClient {
-  async createAuthorizationUrl(scope: string): Promise<AuthorizationParams> {
+  async createAuthorizationUrl(): Promise<AuthorizationParams> {
     // Generate authorization URL with PKCE, state, and nonce
+    // Scopes should be configured in the constructor
   }
 
   async exchangeCode(

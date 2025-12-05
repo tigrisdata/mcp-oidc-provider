@@ -10,6 +10,8 @@ import { Keyv } from 'keyv';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { createMcpCorsMiddleware } from '../adapters/express/cors.js';
 import type { KeyvLike } from '../types/store.js';
+import type { UserSession } from '../types/session.js';
+import type { AuthenticatedUser } from '../types/provider.js';
 
 /**
  * Client information stored by oidc-provider.
@@ -182,6 +184,12 @@ export function createMcpAuthProvider(options: McpAuthProviderOptions): McpAuthP
     namespace: 'oidc:Client',
   });
 
+  // Create a Keyv instance for session lookups (same namespace as core provider uses)
+  const sessionStore = new Keyv<UserSession>({
+    store: underlyingStore,
+    namespace: 'user-sessions',
+  });
+
   // Create JWKS for JWT verification
   const JWKS = createRemoteJWKSet(new URL(`${oidcBaseUrl}/jwks`));
 
@@ -200,13 +208,24 @@ export function createMcpAuthProvider(options: McpAuthProviderOptions): McpAuthP
           issuer: oidcBaseUrl,
         });
 
+        const sub = payload.sub;
+
+        // Look up the session to get IdP tokens and user claims
+        const session = sub ? await sessionStore.get(sub) : undefined;
+
         return {
           token,
           clientId: (payload['client_id'] as string) ?? '',
           scopes: typeof payload['scope'] === 'string' ? payload['scope'].split(' ') : [],
           expiresAt: payload.exp,
           extra: {
-            sub: payload.sub,
+            sub,
+            // Include user claims from the session
+            claims: session?.claims,
+            // Include IdP token set directly
+            idpTokens: session?.tokenSet,
+            // Include any custom data from the IdP client
+            customData: session?.customData,
           },
         };
       } catch {
@@ -251,4 +270,75 @@ export function createMcpAuthProvider(options: McpAuthProviderOptions): McpAuthP
     mcpRoutes: router,
     resourceMetadataUrl,
   };
+}
+
+/**
+ * IdP token set structure.
+ * Contains tokens from the upstream identity provider.
+ */
+export interface IdpTokenSet {
+  /** Access token for calling IdP APIs */
+  accessToken: string;
+  /** ID token containing user identity claims */
+  idToken: string;
+  /** Refresh token for obtaining new access tokens */
+  refreshToken: string;
+  /** Unix timestamp (seconds) when the access token expires */
+  expiresAt?: number;
+}
+
+/**
+ * Get IdP tokens from either req.user (setupMcpExpress) or req.auth (requireBearerAuth).
+ *
+ * This helper abstracts the different locations where IdP tokens are stored
+ * depending on which authentication approach you use.
+ *
+ * @param userOrAuth - Either req.user (AuthenticatedUser) or req.auth (AuthInfo)
+ * @returns The IdP token set, or undefined if not available
+ *
+ * @example
+ * ```typescript
+ * import { getIdpTokens } from 'mcp-oidc-provider/mcp';
+ *
+ * // Works with setupMcpExpress (req.user)
+ * handleMcpRequest(async (req, res) => {
+ *   const tokens = getIdpTokens(req.user);
+ *   if (tokens) {
+ *     console.log('IdP access token:', tokens.accessToken);
+ *   }
+ * });
+ *
+ * // Works with requireBearerAuth (req.auth)
+ * app.post('/mcp', requireBearerAuth({ verifier }), async (req, res) => {
+ *   const tokens = getIdpTokens(req.auth);
+ *   if (tokens) {
+ *     console.log('IdP access token:', tokens.accessToken);
+ *   }
+ * });
+ * ```
+ */
+export function getIdpTokens(
+  userOrAuth: AuthenticatedUser | AuthInfo | undefined | null
+): IdpTokenSet | undefined {
+  if (!userOrAuth) {
+    return undefined;
+  }
+
+  // Check for AuthenticatedUser (from setupMcpExpress via req.user)
+  // AuthenticatedUser has tokenSet directly on it
+  if ('tokenSet' in userOrAuth && userOrAuth.tokenSet) {
+    const tokenSet = userOrAuth.tokenSet as IdpTokenSet;
+    return tokenSet;
+  }
+
+  // Check for AuthInfo (from requireBearerAuth via req.auth)
+  // AuthInfo has idpTokens in extra
+  if ('extra' in userOrAuth && userOrAuth.extra) {
+    const extra = userOrAuth.extra as Record<string, unknown>;
+    if (extra['idpTokens']) {
+      return extra['idpTokens'] as IdpTokenSet;
+    }
+  }
+
+  return undefined;
 }

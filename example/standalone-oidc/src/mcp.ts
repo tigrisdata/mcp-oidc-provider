@@ -18,7 +18,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
 import { ProxyOAuthServerProvider } from '@modelcontextprotocol/sdk/server/auth/providers/proxyProvider.js';
 import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';
-import { createMcpAuthProvider } from 'mcp-oidc-provider/mcp';
+import { createMcpAuthProvider, getIdpTokens } from 'mcp-oidc-provider/mcp';
 
 dotenv.config();
 
@@ -92,11 +92,12 @@ mcpApp.post(
       'whoami',
       { description: 'Get current user info from session' },
       async () => {
+        const idpTokens = getIdpTokens(authInfo);
         return {
           content: [
             {
               type: 'text',
-              text: JSON.stringify({ authInfo }, null, 2),
+              text: JSON.stringify({ authInfo, idpTokens }, null, 2),
             },
           ],
         };
