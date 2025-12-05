@@ -29,6 +29,17 @@ export interface ExpressAuthMiddlewareOptions {
    * Default: 300 (5 minutes)
    */
   refreshBufferSeconds?: number;
+  /**
+   * Base URL of the server for constructing WWW-Authenticate header.
+   * Required for MCP clients to discover OAuth metadata.
+   * If not provided, will be inferred from the request.
+   */
+  baseUrl?: string;
+  /**
+   * Path to the protected resource (MCP endpoint).
+   * Default: '/mcp'
+   */
+  resourcePath?: string;
 }
 
 /**
@@ -60,12 +71,30 @@ export function createExpressAuthMiddleware(
   const logger = options?.logger ?? createConsoleLogger();
   const autoRefresh = options?.autoRefresh ?? true;
   const refreshBufferSeconds = options?.refreshBufferSeconds ?? 300;
+  const configuredBaseUrl = options?.baseUrl;
+
+  // Helper to get base URL from request or config
+  const getBaseUrl = (req: Request): string => {
+    if (configuredBaseUrl) return configuredBaseUrl;
+    const protocol = req.protocol;
+    const host = req.get('host') ?? 'localhost';
+    return `${protocol}://${host}`;
+  };
+
+  // Helper to set WWW-Authenticate header for OAuth discovery (RFC 9728)
+  const setWwwAuthenticate = (req: Request, res: Response): void => {
+    const baseUrl = getBaseUrl(req);
+    const resourceMetadataUrl = `${baseUrl}/.well-known/oauth-protected-resource`;
+    res.setHeader('WWW-Authenticate', `Bearer resource_metadata="${resourceMetadataUrl}"`);
+  };
 
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       // Extract bearer token from Authorization header
       const authHeader = req.headers.authorization;
       if (!authHeader?.startsWith('Bearer ')) {
+        // Include WWW-Authenticate header to help MCP clients discover OAuth
+        setWwwAuthenticate(req, res);
         res.status(401).json({
           error: 'unauthorized',
           message:
@@ -80,6 +109,7 @@ export function createExpressAuthMiddleware(
       const result = await provider.validateToken(accessToken);
 
       if (!result.valid || !result.user) {
+        setWwwAuthenticate(req, res);
         res.status(401).json({
           error: 'invalid_token',
           message: result.error ?? 'Invalid or expired token',

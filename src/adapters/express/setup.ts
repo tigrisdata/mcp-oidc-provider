@@ -100,12 +100,15 @@ export interface McpExpressSetupOptions {
 
 /**
  * MCP request handler function.
- * Called for each authenticated request to /mcp.
+ * Called for POST requests to /mcp (authenticated) and GET/DELETE (stateless).
+ *
+ * For POST: user is the authenticated user
+ * For GET/DELETE: user is undefined (stateless session handling)
  */
 export type McpRequestHandler = (
   req: Request,
   res: Response,
-  user: AuthenticatedUser
+  user: AuthenticatedUser | undefined
 ) => void | Promise<void>;
 
 /**
@@ -121,7 +124,8 @@ export interface McpExpressSetupResult {
    * const { app, handleMcpRequest } = setupMcpExpress({ ... });
    *
    * handleMcpRequest(async (req, res, user) => {
-   *   // Your MCP logic here
+   *   // user is defined for POST (authenticated)
+   *   // user is undefined for GET/DELETE (stateless session handling)
    * });
    *
    * app.listen(3000);
@@ -131,7 +135,9 @@ export interface McpExpressSetupResult {
 
   /**
    * Register your MCP request handler.
-   * This handler is called for authenticated POST requests to /mcp.
+   * This handler is called for:
+   * - POST requests (authenticated, user is defined)
+   * - GET/DELETE requests (stateless, user is undefined)
    */
   handleMcpRequest: (handler: McpRequestHandler) => void;
 }
@@ -283,8 +289,8 @@ export function setupMcpExpress(options: McpExpressSetupOptions): McpExpressSetu
   // Store for the MCP handler
   let mcpHandler: McpRequestHandler | undefined;
 
-  // 8. MCP endpoint with authentication
-  app.post('/mcp', authMiddleware, async (req: Request, res: Response) => {
+  // 8. MCP endpoint with authentication (POST)
+  const mcpPostHandler = async (req: Request, res: Response): Promise<void> => {
     if (!req.user) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
@@ -296,7 +302,21 @@ export function setupMcpExpress(options: McpExpressSetupOptions): McpExpressSetu
     }
 
     await mcpHandler(req, res, req.user);
-  });
+  };
+
+  // 9. Session handler for GET and DELETE (stateless, no auth)
+  const mcpSessionHandler = async (req: Request, res: Response): Promise<void> => {
+    if (!mcpHandler) {
+      res.status(500).json({ error: 'MCP handler not configured' });
+      return;
+    }
+
+    await mcpHandler(req, res, undefined);
+  };
+
+  app.post('/mcp', authMiddleware, mcpPostHandler);
+  app.get('/mcp', mcpSessionHandler);
+  app.delete('/mcp', mcpSessionHandler);
 
   // 9. OIDC provider at root (must be after custom routes)
   app.use('/', adapter.providerCallback());
