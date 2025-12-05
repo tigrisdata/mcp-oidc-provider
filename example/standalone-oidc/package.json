@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "npx tsx src/index.ts"
+    "start": "npm run build && node dist/auth.js & node dist/mcp.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

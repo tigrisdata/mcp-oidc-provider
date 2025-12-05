@@ -27,3 +27,6 @@ export type {
   AuthenticatedUser,
   TokenValidationResult,
 } from './provider.js';
+
+// Store types
+export type { KeyvLike } from './store.js';

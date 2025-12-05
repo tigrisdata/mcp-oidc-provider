@@ -358,9 +358,8 @@ async function handleInteraction(
         await ctx.request.session?.regenerate();
       }
 
-      const idpScopes = config.idpScopes ?? 'openid email profile offline_access';
       const { authorizationUrl, state, nonce, codeVerifier } =
-        await config.idpClient.createAuthorizationUrl(idpScopes);
+        await config.idpClient.createAuthorizationUrl();
 
       // Store interaction data
       const sessionId = randomUUID();

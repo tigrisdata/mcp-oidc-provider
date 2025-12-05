@@ -23,13 +23,14 @@
  *   store,
  *   secret: process.env.SESSION_SECRET!,
  *   port: 4001,
+ *   baseUrl: 'http://localhost:4001',
  * });
  *
  * await oidcServer.start();
  *
  * // Create MCP auth provider for SDK integration
  * const { proxyOAuthServerProviderConfig, mcpRoutes } = createMcpAuthProvider({
- *   oidcServer,
+ *   oidcBaseUrl: 'http://localhost:4001',
  *   store,
  *   mcpServerBaseUrl: 'http://localhost:3001',
  * });
@@ -73,6 +74,8 @@ export type {
   UserSession,
   SessionStore,
   InteractionSession,
+  // Store types
+  KeyvLike,
 } from './types/index.js';
 
 // Logger utilities

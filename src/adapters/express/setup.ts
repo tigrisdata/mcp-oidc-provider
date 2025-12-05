@@ -7,7 +7,7 @@ import express, {
 import session from 'express-session';
 import { Keyv } from 'keyv';
 import type { IdentityProviderClient } from '../../types/idp.js';
-import type { AuthenticatedUser } from '../../types/provider.js';
+import type { KeyvLike } from '../../types/store.js';
 import type { JWKS } from '../../utils/jwks.js';
 import { createOidcProvider } from '../../core/provider.js';
 import { createExpressAdapter, isOidcProviderRoute } from './adapter.js';
@@ -27,6 +27,7 @@ export interface McpExpressSetupOptions {
   /**
    * Keyv instance for storage.
    * Used for sessions, tokens, grants, and other OIDC data.
+   * Any Keyv instance will work regardless of version.
    *
    * @example
    * ```typescript
@@ -39,7 +40,7 @@ export interface McpExpressSetupOptions {
    * const store = new Keyv({ store: new KeyvRedis('redis://localhost:6379') });
    * ```
    */
-  store: Keyv;
+  store: KeyvLike;
 
   /**
    * Base URL of the server.
@@ -83,33 +84,30 @@ export interface McpExpressSetupOptions {
    * Useful for request logging, etc.
    */
   customMiddleware?: RequestHandler[];
-
-  /**
-   * Scopes to request from the upstream identity provider.
-   * Some IdPs (like Clerk) don't support all scopes.
-   * Default: 'openid email profile offline_access'
-   *
-   * @example
-   * ```typescript
-   * // For Clerk (doesn't support offline_access)
-   * idpScopes: 'openid email profile'
-   * ```
-   */
-  idpScopes?: string;
 }
 
 /**
  * MCP request handler function.
  * Called for POST requests to /mcp (authenticated) and GET/DELETE (stateless).
  *
- * For POST: user is the authenticated user
- * For GET/DELETE: user is undefined (stateless session handling)
+ * For POST: `req.user` contains the authenticated user
+ * For GET/DELETE: `req.user` is undefined (stateless session handling)
+ *
+ * @example
+ * ```typescript
+ * handleMcpRequest(async (req, res) => {
+ *   if (req.user) {
+ *     // Authenticated POST request
+ *     console.log('User:', req.user.userId);
+ *     console.log('Claims:', req.user.claims);
+ *     console.log('IdP Access Token:', req.user.tokenSet.accessToken);
+ *   } else {
+ *     // Stateless GET/DELETE for session management
+ *   }
+ * });
+ * ```
  */
-export type McpRequestHandler = (
-  req: Request,
-  res: Response,
-  user: AuthenticatedUser | undefined
-) => void | Promise<void>;
+export type McpRequestHandler = (req: Request, res: Response) => void | Promise<void>;
 
 /**
  * Result of setting up the Express MCP server.
@@ -123,9 +121,12 @@ export interface McpExpressSetupResult {
    * ```typescript
    * const { app, handleMcpRequest } = setupMcpExpress({ ... });
    *
-   * handleMcpRequest(async (req, res, user) => {
-   *   // user is defined for POST (authenticated)
-   *   // user is undefined for GET/DELETE (stateless session handling)
+   * handleMcpRequest(async (req, res) => {
+   *   if (req.user) {
+   *     // POST: authenticated user available
+   *     console.log('User:', req.user.userId);
+   *   }
+   *   // GET/DELETE: stateless session handling
    * });
    *
    * app.listen(3000);
@@ -136,8 +137,8 @@ export interface McpExpressSetupResult {
   /**
    * Register your MCP request handler.
    * This handler is called for:
-   * - POST requests (authenticated, user is defined)
-   * - GET/DELETE requests (stateless, user is undefined)
+   * - POST requests (authenticated, `req.user` is defined)
+   * - GET/DELETE requests (stateless, `req.user` is undefined)
    */
   handleMcpRequest: (handler: McpRequestHandler) => void;
 }
@@ -176,9 +177,9 @@ export interface McpExpressSetupResult {
  *   secret: process.env.SESSION_SECRET,
  * });
  *
- * handleMcpRequest(async (req, res, user) => {
+ * handleMcpRequest(async (req, res) => {
  *   const transport = new StreamableHTTPServerTransport({ ... });
- *   const server = createMcpServer(user);
+ *   const server = createMcpServer(req.user); // Access user via req.user
  *   await server.connect(transport);
  *   await transport.handleRequest(req, res, req.body);
  * });
@@ -197,7 +198,6 @@ export function setupMcpExpress(options: McpExpressSetupOptions): McpExpressSetu
     sessionMaxAge = 30 * 24 * 60 * 60 * 1000, // 30 days
     additionalCorsOrigins,
     customMiddleware = [],
-    idpScopes,
   } = options;
 
   // Create Express app
@@ -212,7 +212,6 @@ export function setupMcpExpress(options: McpExpressSetupOptions): McpExpressSetu
     cookieSecrets: [secret],
     isProduction,
     jwks,
-    idpScopes,
   });
 
   // Create CORS middleware
@@ -290,6 +289,7 @@ export function setupMcpExpress(options: McpExpressSetupOptions): McpExpressSetu
   let mcpHandler: McpRequestHandler | undefined;
 
   // 8. MCP endpoint with authentication (POST)
+  // req.user is set by authMiddleware
   const mcpPostHandler = async (req: Request, res: Response): Promise<void> => {
     if (!req.user) {
       res.status(401).json({ error: 'Unauthorized' });
@@ -301,17 +301,18 @@ export function setupMcpExpress(options: McpExpressSetupOptions): McpExpressSetu
       return;
     }
 
-    await mcpHandler(req, res, req.user);
+    await mcpHandler(req, res);
   };
 
   // 9. Session handler for GET and DELETE (stateless, no auth)
+  // req.user will be undefined for these requests
   const mcpSessionHandler = async (req: Request, res: Response): Promise<void> => {
     if (!mcpHandler) {
       res.status(500).json({ error: 'MCP handler not configured' });
       return;
     }
 
-    await mcpHandler(req, res, undefined);
+    await mcpHandler(req, res);
   };
 
   app.post('/mcp', authMiddleware, mcpPostHandler);

@@ -4,6 +4,7 @@ import { Keyv } from 'keyv';
 import type { Server } from 'node:http';
 import type { IdentityProviderClient } from '../../types/idp.js';
 import type { TokenValidationResult } from '../../types/provider.js';
+import type { KeyvLike } from '../../types/store.js';
 import type { JWKS } from '../../utils/jwks.js';
 import { createOidcProvider } from '../../core/provider.js';
 import { createExpressAdapter, isOidcProviderRoute } from './adapter.js';
@@ -21,8 +22,9 @@ export interface OidcServerOptions {
 
   /**
    * Keyv instance for storage.
+   * Any Keyv instance will work regardless of version.
    */
-  store: Keyv;
+  store: KeyvLike;
 
   /**
    * Secret for signing cookies and sessions.
@@ -30,16 +32,14 @@ export interface OidcServerOptions {
   secret: string;
 
   /**
-   * Port to listen on.
-   * Default: 4000
+   * Port number for the server to listen on.
    */
-  port?: number;
+  port: number;
 
   /**
-   * Base URL of this OIDC server.
-   * If not provided, defaults to http://localhost:{port}
+   * Base URL of this OIDC server (e.g., 'http://localhost:4001').
    */
-  baseUrl?: string;
+  baseUrl: string;
 
   /**
    * Optional JWKS for signing tokens.
@@ -67,7 +67,7 @@ export interface OidcServerOptions {
   /**
    * Callback when server starts listening.
    */
-  onListen?: (port: number, baseUrl: string) => void;
+  onListen?: (baseUrl: string) => void;
 }
 
 /**
@@ -89,11 +89,6 @@ export interface OidcServerResult {
    * The base URL of the OIDC server.
    */
   baseUrl: string;
-
-  /**
-   * The port the server will listen on.
-   */
-  port: number;
 
   /**
    * Validate an access token and get the user session including IdP tokens.
@@ -124,11 +119,12 @@ export interface OidcServerResult {
  *     domain: process.env.AUTH0_DOMAIN,
  *     clientId: process.env.AUTH0_CLIENT_ID,
  *     clientSecret: process.env.AUTH0_CLIENT_SECRET,
- *     redirectUri: 'http://localhost:4000/oauth/callback',
+ *     redirectUri: 'http://localhost:4001/oauth/callback',
  *   }),
  *   store: new Keyv(),
  *   secret: process.env.SESSION_SECRET,
- *   port: 4000,
+ *   port: 4001,
+ *   baseUrl: 'http://localhost:4001',
  * });
  *
  * await server.start();
@@ -156,16 +152,14 @@ export function createOidcServer(options: OidcServerOptions): OidcServerResult {
     idpClient,
     store,
     secret,
-    port = 4000,
-    baseUrl: providedBaseUrl,
+    port,
+    baseUrl,
     jwks,
     isProduction = process.env['NODE_ENV'] === 'production',
     sessionMaxAge = 30 * 24 * 60 * 60 * 1000, // 30 days
     additionalCorsOrigins,
     onListen,
   } = options;
-
-  const baseUrl = providedBaseUrl ?? `http://localhost:${port}`;
 
   // Create Express app
   const app = express();
@@ -254,7 +248,7 @@ export function createOidcServer(options: OidcServerOptions): OidcServerResult {
     return new Promise((resolve) => {
       const server = app.listen(port, () => {
         if (onListen) {
-          onListen(port, baseUrl);
+          onListen(baseUrl);
         }
         resolve(server);
       });
@@ -265,7 +259,6 @@ export function createOidcServer(options: OidcServerOptions): OidcServerResult {
     app,
     start,
     baseUrl,
-    port,
     validateToken: provider.validateToken,
   };
 }

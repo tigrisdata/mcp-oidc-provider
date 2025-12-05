@@ -1,16 +1,23 @@
 # mcp-oidc-provider
 
-Framework-agnostic OIDC provider for MCP (Model Context Protocol) servers with pluggable identity providers.
+OIDC provider for MCP (Model Context Protocol) servers with pluggable identity providers.
 
-## Features
+Implementing a [remote hosted MCP server](https://support.claude.com/en/articles/11503834-building-custom-connectors-via-remote-mcp-servers) requires [implementing ](https://modelcontextprotocol.io/specification/draft/basic/authorization). In theory, this is very straight forward because modern applications either implement OAuth specs themselves or use a OAuth complaint IDP like Auth0 or Clerk etc. [Long story short](https://www.tigrisdata.com/blog/mcp-oauth/), using your own IDP as it is imposes many limitations.
 
-- **Pluggable Identity Providers**: Generic interface for any OIDC-compliant IdP
-- **Built-in Auth0 Support**: Ready-to-use Auth0 client implementation
-- **Express Adapter**: Full Express.js integration included
-- **MCP SDK Integration**: Works seamlessly with `@modelcontextprotocol/sdk`
-- **Dynamic Client Registration**: Automatic DCR support for MCP clients
-- **Keyv Storage**: Compatible with any Keyv backend (Tigris, Redis, MongoDB, etc.)
-- **TypeScript First**: Full type definitions included
+This package takes care of those limitations for you so you can focus on implementing your tools, resources and prompts and not spend hours investigating why your implementation don't work for Cursor, or logs you out from Claude every x hours etc.
+
+This package allows you to run either as a Standalone OIDC Server, or integrate the OIDC Server in your MCP implementation. It comes with support for Auth0 and Clerk but you can write the implementation of your own client and plug in seamlessly.
+
+It uses different packages under the hood to glue everything together
+
+| Package           | Purpose                                                                                                                           |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `oidc-provider`   | Core OIDC/OAuth 2.0 server implementation. Handles authorization, token issuance, JWKS, client registration, and all OAuth flows |
+| `openid-client`   | OAuth 2.0/OIDC client library. Used by IdP clients (Auth0, Clerk) to communicate with upstream identity providers                 |
+| `jose`            | JWT signing/verification and JWKS generation. Used for access tokens and ID tokens                                                |
+| `keyv`            | Universal key-value storage abstraction. Used for sessions, tokens, grants, and OIDC adapter data                                 |
+| `express`         | Web framework for the Express adapter. Provides routing, middleware, and HTTP handling                                            |
+| `express-session` | Session management for Express. Stores login state during OAuth flows                                                             |
 
 ## Installation
 
@@ -18,7 +25,7 @@ Framework-agnostic OIDC provider for MCP (Model Context Protocol) servers with p
 npm install mcp-oidc-provider keyv
 ```
 
-For Auth0 support (recommended):
+For Auth0 or Clerk support:
 ```bash
 npm install mcp-oidc-provider keyv openid-client
 ```
@@ -65,7 +72,7 @@ const MCP_BASE_URL = 'http://localhost:3001';
 
 // Get config for ProxyOAuthServerProvider
 const { proxyOAuthServerProviderConfig, mcpRoutes, resourceMetadataUrl } = createMcpAuthProvider({
-  oidcServer,
+  oidcBaseUrl: oidcServer.baseUrl,
   store,
   mcpServerBaseUrl: MCP_BASE_URL,
 });
@@ -94,7 +101,7 @@ mcpApp.listen(3001);
 
 ### Option 2: All-in-One Setup
 
-For simpler deployments where OIDC and MCP run in the same Express app. See the [express-oauth example](./example/express-oauth).
+For simpler deployments where OIDC and MCP run in the same Express app. See the [express-oauth example](./example/express-auth0).
 
 ```typescript
 import { Keyv } from 'keyv';
@@ -113,9 +120,9 @@ const { app, handleMcpRequest } = setupMcpExpress({
   secret: process.env.SESSION_SECRET!,
 });
 
-// Handle MCP requests with authenticated user
-handleMcpRequest(async (req, res, user) => {
-  console.log('Authenticated user:', user.claims.email);
+// Handle MCP requests - user is available via req.user
+handleMcpRequest(async (req, res) => {
+  console.log('Authenticated user:', req.user);
   // Your MCP server logic here
 });
 
@@ -169,10 +176,14 @@ import {
 ```typescript
 import {
   createMcpAuthProvider,
+  getIdpTokens,
   InvalidTokenError,
   type McpAuthProviderOptions,
   type McpAuthProviderResult,
   type ProxyOAuthServerProviderConfig,
+  type ClientInfo,
+  type AuthInfo,
+  type IdpTokenSet,
 } from 'mcp-oidc-provider/mcp';
 ```
 
@@ -180,37 +191,81 @@ import {
 
 ### createOidcServer Options
 
-| Option | Type | Required | Description |
-|--------|------|----------|-------------|
-| `idpClient` | `IdentityProviderClient` | Yes | Identity provider client (e.g., Auth0Client) |
-| `store` | `Keyv` | Yes | Keyv instance for storage |
-| `secret` | `string` | Yes | Secret for signing cookies/sessions |
-| `port` | `number` | No | Port to listen on (default: 4000) |
-| `baseUrl` | `string` | No | Base URL of the OIDC server |
-| `jwks` | `JWKS` | No | Custom JWKS for signing tokens |
-| `isProduction` | `boolean` | No | Production mode flag |
-| `sessionMaxAge` | `number` | No | Session max age in ms (default: 30 days) |
-| `onListen` | `function` | No | Callback when server starts |
+| Option           | Type                     | Required | Description                                 |
+| ---------------- | ------------------------ | -------- | ------------------------------------------- |
+| `idpClient`      | `IdentityProviderClient` | Yes      | Identity provider client (e.g., Auth0Client)|
+| `store`          | `Keyv`                   | Yes      | Keyv instance for storage                   |
+| `secret`         | `string`                 | Yes      | Secret for signing cookies/sessions         |
+| `port`           | `number`                 | No       | Port to listen on (default: 4000)           |
+| `baseUrl`        | `string`                 | No       | Base URL of the OIDC server                 |
+| `jwks`           | `JWKS`                   | No       | Custom JWKS for signing tokens              |
+| `isProduction`   | `boolean`                | No       | Production mode flag                        |
+| `sessionMaxAge`  | `number`                 | No       | Session max age in ms (default: 30 days)    |
+| `onListen`       | `function`               | No       | Callback when server starts                 |
 
 ### createMcpAuthProvider Options
 
-| Option | Type | Required | Description |
-|--------|------|----------|-------------|
-| `oidcServer` | `OidcServerResult` | Yes | OIDC server from createOidcServer |
-| `store` | `Keyv` | Yes | Same Keyv instance used by OIDC server |
-| `mcpServerBaseUrl` | `string` | Yes | Base URL of your MCP server |
-| `mcpEndpointPath` | `string` | No | MCP endpoint path (default: '/mcp') |
-| `scopesSupported` | `string[]` | No | Supported OAuth scopes |
+| Option             | Type       | Required | Description                                                  |
+| ------------------ | ---------- | -------- | ------------------------------------------------------------ |
+| `oidcBaseUrl`      | `string`   | Yes      | Base URL of the OIDC server (e.g., `http://localhost:4001`)  |
+| `store`            | `Keyv`     | Yes      | Same Keyv instance used by OIDC server                       |
+| `mcpServerBaseUrl` | `string`   | Yes      | Base URL of your MCP server                                  |
+| `mcpEndpointPath`  | `string`   | No       | MCP endpoint path (default: `/mcp`)                          |
+| `scopesSupported`  | `string[]` | No       | Supported OAuth scopes                                       |
 
 ### Auth0Config
 
-| Option | Type | Required | Description |
-|--------|------|----------|-------------|
-| `domain` | `string` | Yes | Auth0 domain (e.g., 'tenant.auth0.com') |
-| `clientId` | `string` | Yes | OAuth client ID |
-| `clientSecret` | `string` | Yes | OAuth client secret |
-| `redirectUri` | `string` | Yes | OAuth callback URL |
-| `audience` | `string` | No | API audience for access tokens |
+| Option         | Type     | Required | Description                                                   |
+| -------------- | -------- | -------- | ------------------------------------------------------------- |
+| `domain`       | `string` | Yes      | Auth0 domain (e.g., `tenant.auth0.com`)                       |
+| `clientId`     | `string` | Yes      | OAuth client ID                                               |
+| `clientSecret` | `string` | Yes      | OAuth client secret                                           |
+| `redirectUri`  | `string` | Yes      | OAuth callback URL                                            |
+| `audience`     | `string` | No       | API audience for access tokens                                |
+| `scopes`       | `string` | No       | OAuth scopes (default: `openid email profile offline_access`) |
+
+## Accessing IdP Tokens
+
+When you need to call upstream IdP APIs (e.g., Auth0 Management API, Clerk userinfo), use the `getIdpTokens` helper. It works with both authentication patterns:
+
+```typescript
+import { getIdpTokens } from 'mcp-oidc-provider/mcp';
+
+// Works with setupMcpExpress (req.user)
+handleMcpRequest(async (req, res) => {
+  const tokens = getIdpTokens(req.user);
+  if (tokens) {
+    const userInfo = await fetch('https://your-idp.com/userinfo', {
+      headers: { Authorization: `Bearer ${tokens.accessToken}` },
+    });
+  }
+});
+
+// Works with requireBearerAuth (req.auth) - standalone OIDC setup
+app.post('/mcp', requireBearerAuth({ verifier: authProvider }), async (req, res) => {
+  const tokens = getIdpTokens(req.auth);
+  if (tokens) {
+    // tokens.accessToken - IdP access token
+    // tokens.idToken - IdP ID token
+    // tokens.refreshToken - IdP refresh token
+  }
+});
+```
+
+The `IdpTokenSet` interface:
+
+```typescript
+interface IdpTokenSet {
+  accessToken: string;    // Access token for calling IdP APIs
+  idToken: string;        // ID token containing user identity
+  refreshToken: string;   // Refresh token for obtaining new access tokens
+  expiresAt?: number;     // Unix timestamp when access token expires
+}
+```
+
+You can also access tokens directly if preferred:
+- `req.user.tokenSet` (with `setupMcpExpress`)
+- `req.auth.extra.idpTokens` (with `requireBearerAuth`)
 
 ## Custom Identity Provider
 
@@ -220,8 +275,9 @@ Implement the `IdentityProviderClient` interface to support any OIDC-compliant i
 import type { IdentityProviderClient, AuthorizationParams, TokenSet, UserClaims } from 'mcp-oidc-provider';
 
 class MyIdpClient implements IdentityProviderClient {
-  async createAuthorizationUrl(scope: string): Promise<AuthorizationParams> {
+  async createAuthorizationUrl(): Promise<AuthorizationParams> {
     // Generate authorization URL with PKCE, state, and nonce
+    // Scopes should be configured in the constructor
   }
 
   async exchangeCode(
@@ -286,16 +342,16 @@ const store = new Keyv({
 
 When using `createOidcServer`, the following endpoints are available:
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /authorize` | Authorization endpoint |
-| `POST /token` | Token endpoint |
-| `POST /token/revocation` | Token revocation endpoint |
-| `POST /register` | Dynamic Client Registration |
-| `GET /jwks` | JSON Web Key Set |
-| `GET /.well-known/openid-configuration` | OIDC Discovery |
-| `GET /oauth/callback` | IdP callback handler |
-| `GET /health` | Health check |
+| Endpoint                               | Description                   |
+| -------------------------------------- | ----------------------------- |
+| `GET /authorize`                       | Authorization endpoint        |
+| `POST /token`                          | Token endpoint                |
+| `POST /token/revocation`               | Token revocation endpoint     |
+| `POST /register`                       | Dynamic Client Registration   |
+| `GET /jwks`                            | JSON Web Key Set              |
+| `GET /.well-known/openid-configuration`| OIDC Discovery                |
+| `GET /oauth/callback`                  | IdP callback handler          |
+| `GET /health`                          | Health check                  |
 
 ## MCP Client Support
 
