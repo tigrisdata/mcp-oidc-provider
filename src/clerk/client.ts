@@ -20,6 +20,12 @@ export interface ClerkConfig {
   clientSecret: string;
   /** Redirect URI for OAuth callback */
   redirectUri: string;
+  /**
+   * OAuth scopes to request from Clerk.
+   * Note: Clerk doesn't support offline_access scope.
+   * Default: 'openid email profile'
+   */
+  scopes?: string;
 }
 
 /**
@@ -90,14 +96,19 @@ export class ClerkClient implements IdentityProviderClient {
 
   /**
    * Create an authorization URL for initiating the OAuth flow.
+   * Uses the scopes configured in the constructor (default: 'openid email profile').
+   * Note: Clerk doesn't support offline_access scope.
    */
-  async createAuthorizationUrl(scope: string): Promise<AuthorizationParams> {
+  async createAuthorizationUrl(): Promise<AuthorizationParams> {
     const configuration = await this.getConfiguration();
 
     const codeVerifier = client.randomPKCECodeVerifier();
     const codeChallenge = await client.calculatePKCECodeChallenge(codeVerifier);
     const state = this.generateState();
     const nonce = this.generateNonce();
+
+    // Clerk doesn't support offline_access, so default to basic scopes
+    const scope = this.config.scopes ?? 'openid email profile';
 
     const parameters: Record<string, string> = {
       redirect_uri: this.config.redirectUri,

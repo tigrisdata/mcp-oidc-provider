@@ -75,8 +75,8 @@ export interface IdentityProviderConfig {
  * @example
  * ```typescript
  * class MyIdpClient implements IdentityProviderClient {
- *   async createAuthorizationUrl(scope: string): Promise<AuthorizationParams> {
- *     // Generate authorization URL with PKCE
+ *   async createAuthorizationUrl(): Promise<AuthorizationParams> {
+ *     // Generate authorization URL with PKCE using configured scopes
  *   }
  *   // ... implement other methods
  * }
@@ -86,11 +86,11 @@ export interface IdentityProviderClient {
   /**
    * Create an authorization URL for initiating the OAuth flow.
    * Should generate PKCE code verifier/challenge, state, and nonce.
+   * Uses the scopes configured in the client constructor.
    *
-   * @param scope - Space-separated list of OAuth scopes
    * @returns Authorization parameters including the URL and security tokens
    */
-  createAuthorizationUrl(scope: string): Promise<AuthorizationParams>;
+  createAuthorizationUrl(): Promise<AuthorizationParams>;
 
   /**
    * Exchange an authorization code for tokens.
