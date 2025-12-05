@@ -60,6 +60,19 @@ export interface OidcProviderConfig {
   /** Supported OAuth scopes (default: ['openid', 'email', 'profile', 'offline_access']) */
   scopes?: string[];
 
+  /**
+   * Scopes to request from the upstream identity provider.
+   * Some IdPs (like Clerk) don't support all scopes.
+   * Default: 'openid email profile offline_access'
+   *
+   * @example
+   * ```typescript
+   * // For Clerk (doesn't support offline_access)
+   * idpScopes: 'openid email profile'
+   * ```
+   */
+  idpScopes?: string;
+
   /** Production mode flag - affects cookie security settings */
   isProduction?: boolean;
 
