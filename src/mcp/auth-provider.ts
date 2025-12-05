@@ -8,8 +8,8 @@
 import { Router, type Request, type Response } from 'express';
 import { Keyv } from 'keyv';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
-import type { OidcServerResult } from '../adapters/express/server.js';
 import { createMcpCorsMiddleware } from '../adapters/express/cors.js';
+import type { KeyvLike } from '../types/store.js';
 
 /**
  * Client information stored by oidc-provider.
@@ -45,14 +45,16 @@ export interface AuthInfo {
  */
 export interface McpAuthProviderOptions {
   /**
-   * The OIDC server instance created by createOidcServer.
+   * The base URL of the OIDC server (e.g., 'http://localhost:4001').
+   * This is used to construct OAuth endpoints and verify tokens.
    */
-  oidcServer: OidcServerResult;
+  oidcBaseUrl: string;
 
   /**
    * Keyv store instance (same one used by the OIDC server).
+   * Any Keyv instance will work regardless of version.
    */
-  store: Keyv;
+  store: KeyvLike;
 
   /**
    * The base URL of the MCP server (resource server).
@@ -143,15 +145,11 @@ export class InvalidTokenError extends Error {
  *
  * @example
  * ```typescript
- * import { createOidcServer } from 'mcp-oidc-provider/express';
  * import { createMcpAuthProvider } from 'mcp-oidc-provider/mcp';
  * import { ProxyOAuthServerProvider } from '@modelcontextprotocol/sdk/server/auth/providers/proxyProvider.js';
  *
- * const oidcServer = createOidcServer({ ... });
- * await oidcServer.start();
- *
  * const { proxyOAuthServerProviderConfig, mcpRoutes, resourceMetadataUrl } = createMcpAuthProvider({
- *   oidcServer,
+ *   oidcBaseUrl: 'http://localhost:4001',
  *   store,
  *   mcpServerBaseUrl: 'http://localhost:3001',
  * });
@@ -168,13 +166,12 @@ export class InvalidTokenError extends Error {
  */
 export function createMcpAuthProvider(options: McpAuthProviderOptions): McpAuthProviderResult {
   const {
-    oidcServer,
+    oidcBaseUrl,
     store,
     mcpServerBaseUrl,
     mcpEndpointPath = '/mcp',
     scopesSupported = ['openid', 'email', 'profile', 'offline_access'],
   } = options;
-  const oidcBaseUrl = oidcServer.baseUrl;
 
   // Get the underlying store for client lookups
   const underlyingStore = store.opts?.store;

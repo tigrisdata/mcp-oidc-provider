@@ -1,6 +1,6 @@
 import type Provider from 'oidc-provider';
-import type { Keyv } from 'keyv';
 import type { IdentityProviderClient } from './idp.js';
+import type { KeyvLike } from './store.js';
 import type { SessionStore } from './session.js';
 import type { HttpContext } from './http.js';
 import type { Logger } from '../utils/logger.js';
@@ -20,6 +20,9 @@ export interface OidcProviderConfig {
    * Used for sessions, tokens, grants, and other OIDC data.
    * Namespacing is handled internally.
    *
+   * Any Keyv instance will work regardless of version, as the interface
+   * is designed to be compatible with all Keyv versions.
+   *
    * @example
    * ```typescript
    * // In-memory (development only)
@@ -31,11 +34,11 @@ export interface OidcProviderConfig {
    * const store = new Keyv({ store: new KeyvRedis('redis://localhost:6379') });
    *
    * // Tigris
-   * import { KeyvTigris } from '@tigrisdata/keyv-tigris';
+   * import { KeyvTigris } from 'keyv-tigris';
    * const store = new Keyv({ store: new KeyvTigris() });
    * ```
    */
-  store: Keyv;
+  store: KeyvLike;
 
   /** Cookie signing secret(s) - use multiple for key rotation */
   cookieSecrets: string[];

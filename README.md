@@ -1,16 +1,23 @@
 # mcp-oidc-provider
 
-Framework-agnostic OIDC provider for MCP (Model Context Protocol) servers with pluggable identity providers.
+OIDC provider for MCP (Model Context Protocol) servers with pluggable identity providers.
 
-## Features
+Implementing a [remote hosted MCP server](https://support.claude.com/en/articles/11503834-building-custom-connectors-via-remote-mcp-servers) requires [implementing ](https://modelcontextprotocol.io/specification/draft/basic/authorization). In theory, this is very straight forward because modern applications either implement OAuth specs themselves or use a OAuth complaint IDP like Auth0 or Clerk etc. [Long story short](https://www.tigrisdata.com/blog/mcp-oauth/), using your own IDP as it is imposes many limitations.
 
-- **Pluggable Identity Providers**: Generic interface for any OIDC-compliant IdP
-- **Built-in Auth0 Support**: Ready-to-use Auth0 client implementation
-- **Express Adapter**: Full Express.js integration included
-- **MCP SDK Integration**: Works seamlessly with `@modelcontextprotocol/sdk`
-- **Dynamic Client Registration**: Automatic DCR support for MCP clients
-- **Keyv Storage**: Compatible with any Keyv backend (Tigris, Redis, MongoDB, etc.)
-- **TypeScript First**: Full type definitions included
+This package takes care of those limitations for you so you can focus on implementing your tools, resources and prompts and not spend hours investigating why your implementation don't work for Cursor, or logs you out from Claude every x hours etc.
+
+This package allows you to run either as a Standalone OIDC Server, or integrate the OIDC Server in your MCP implementation. It comes with support for Auth0 and Clerk but you can write the implementation of your own client and plug in seamlessly.
+
+It uses different packages under the hood to glue everything together
+
+| Package         | Purpose                                                                                                                                               |
+|-----------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
+| oidc-provider   | Core OIDC/OAuth 2.0 server implementation. Handles authorization, token issuance, JWKS, client registration, and all OAuth flows.                     |
+| openid-client   | OAuth 2.0/OIDC client library. Used by IdP clients (Auth0, Clerk) to communicate with upstream identity providers.                                    |
+| jose            | JWT signing/verification and JWKS generation. Used for access tokens and ID tokens.                                                                   |
+| keyv            | Universal key-value storage abstraction. Used for sessions, tokens, grants, and OIDC adapter data. Supports Tigris, Redis, SQLite, etc. via adapters. |
+| express         | Web framework for the Express adapter. Provides routing, middleware, and HTTP handling.                                                               |
+| express-session | Session management for Express. Stores login state during OAuth flows.                                                                                |
 
 ## Installation
 
@@ -18,7 +25,7 @@ Framework-agnostic OIDC provider for MCP (Model Context Protocol) servers with p
 npm install mcp-oidc-provider keyv
 ```
 
-For Auth0 support (recommended):
+For Auth0 or Clerk support:
 ```bash
 npm install mcp-oidc-provider keyv openid-client
 ```
@@ -94,7 +101,7 @@ mcpApp.listen(3001);
 
 ### Option 2: All-in-One Setup
 
-For simpler deployments where OIDC and MCP run in the same Express app. See the [express-oauth example](./example/express-oauth).
+For simpler deployments where OIDC and MCP run in the same Express app. See the [express-oauth example](./example/express-auth0).
 
 ```typescript
 import { Keyv } from 'keyv';

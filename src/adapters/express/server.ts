@@ -4,6 +4,7 @@ import { Keyv } from 'keyv';
 import type { Server } from 'node:http';
 import type { IdentityProviderClient } from '../../types/idp.js';
 import type { TokenValidationResult } from '../../types/provider.js';
+import type { KeyvLike } from '../../types/store.js';
 import type { JWKS } from '../../utils/jwks.js';
 import { createOidcProvider } from '../../core/provider.js';
 import { createExpressAdapter, isOidcProviderRoute } from './adapter.js';
@@ -21,8 +22,9 @@ export interface OidcServerOptions {
 
   /**
    * Keyv instance for storage.
+   * Any Keyv instance will work regardless of version.
    */
-  store: Keyv;
+  store: KeyvLike;
 
   /**
    * Secret for signing cookies and sessions.

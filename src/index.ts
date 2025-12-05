@@ -73,6 +73,8 @@ export type {
   UserSession,
   SessionStore,
   InteractionSession,
+  // Store types
+  KeyvLike,
 } from './types/index.js';
 
 // Logger utilities

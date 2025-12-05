@@ -1,5 +1,6 @@
 import type { Adapter, AdapterPayload } from 'oidc-provider';
 import { Keyv } from 'keyv';
+import type { KeyvLike } from '../types/store.js';
 import type { Logger } from '../utils/logger.js';
 
 /**
@@ -14,7 +15,7 @@ export type OidcAdapterFactory = (name: string) => Adapter;
  * @param logger - Logger instance
  * @returns Adapter factory function for oidc-provider
  */
-export function createOidcAdapterFactory(store: Keyv, logger: Logger): OidcAdapterFactory {
+export function createOidcAdapterFactory(store: KeyvLike, logger: Logger): OidcAdapterFactory {
   // Get the underlying store to create namespaced Keyv instances
   const underlyingStore = store.opts?.store;
 
