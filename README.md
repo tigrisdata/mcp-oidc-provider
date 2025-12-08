@@ -101,7 +101,7 @@ mcpApp.listen(3001);
 
 ### Option 2: All-in-One Setup
 
-For simpler deployments where OIDC and MCP run in the same Express app. See the [express-oauth example](./example/express-auth0).
+For simpler deployments where OIDC and MCP run in the same Express app. See the [mcp-integrated-oidc example](./example/mcp-integrated-oidc).
 
 ```typescript
 import { Keyv } from 'keyv';
