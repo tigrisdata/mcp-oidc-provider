@@ -1,5 +1,5 @@
 import type Provider from 'oidc-provider';
-import type { IdentityProviderClient } from './idp.js';
+import type { IOidcClient } from './idp.js';
 import type { KeyvLike } from './store.js';
 import type { SessionStore } from './session.js';
 import type { HttpContext } from './http.js';
@@ -12,8 +12,8 @@ export interface OidcProviderConfig {
   /** Issuer URL for the OIDC provider (your server's base URL) */
   issuer: string;
 
-  /** Identity provider client for upstream authentication */
-  idpClient: IdentityProviderClient;
+  /** OIDC client for upstream authentication */
+  idpClient: IOidcClient;
 
   /**
    * Keyv instance for storage.

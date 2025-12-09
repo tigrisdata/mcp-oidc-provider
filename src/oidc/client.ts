@@ -1,12 +1,7 @@
 import * as client from 'openid-client';
 import { randomBytes } from 'node:crypto';
 import { decodeJwt } from 'jose';
-import type {
-  IdentityProviderClient,
-  AuthorizationParams,
-  TokenSet,
-  UserClaims,
-} from '../types/idp.js';
+import type { IOidcClient, AuthorizationParams, TokenSet, UserClaims } from '../types/idp.js';
 
 /**
  * Function type for extracting custom data from ID token claims.
@@ -15,7 +10,7 @@ import type {
  * @example
  * ```typescript
  * // Extract Okta groups
- * const extractOktaData: ExtractCustomDataFn = (claims) => {
+ * const extractGroups: ExtractCustomDataFn = (claims) => {
  *   if (claims['groups']) {
  *     return { groups: claims['groups'] };
  *   }
@@ -26,10 +21,10 @@ import type {
 export type ExtractCustomDataFn = (claims: UserClaims) => Record<string, unknown> | undefined;
 
 /**
- * Configuration for the generic OIDC client.
+ * Configuration for the OIDC client.
  * Works with any OIDC-compliant identity provider.
  */
-export interface GenericOidcConfig {
+export interface OidcClientConfig {
   /**
    * OIDC issuer URL. This is the base URL where the provider's
    * `.well-known/openid-configuration` endpoint is located.
@@ -107,16 +102,16 @@ export interface GenericOidcConfig {
 }
 
 /**
- * Generic OIDC client that works with any OIDC-compliant identity provider.
+ * OIDC client that works with any OIDC-compliant identity provider.
  *
  * This client uses OpenID Connect Discovery to automatically configure
  * endpoints from the provider's `.well-known/openid-configuration`.
  *
  * @example Google
  * ```typescript
- * import { GenericOidcClient } from 'mcp-oidc-provider/generic';
+ * import { OidcClient } from 'mcp-oidc-provider/oidc';
  *
- * const google = new GenericOidcClient({
+ * const client = new OidcClient({
  *   issuer: 'https://accounts.google.com',
  *   clientId: process.env.GOOGLE_CLIENT_ID!,
  *   clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
@@ -126,7 +121,7 @@ export interface GenericOidcConfig {
  *
  * @example Microsoft / Azure AD
  * ```typescript
- * const azure = new GenericOidcClient({
+ * const client = new OidcClient({
  *   issuer: `https://login.microsoftonline.com/${tenantId}/v2.0`,
  *   clientId: process.env.AZURE_CLIENT_ID!,
  *   clientSecret: process.env.AZURE_CLIENT_SECRET!,
@@ -137,7 +132,7 @@ export interface GenericOidcConfig {
  *
  * @example Okta
  * ```typescript
- * const okta = new GenericOidcClient({
+ * const client = new OidcClient({
  *   issuer: 'https://your-domain.okta.com',
  *   clientId: process.env.OKTA_CLIENT_ID!,
  *   clientSecret: process.env.OKTA_CLIENT_SECRET!,
@@ -152,7 +147,7 @@ export interface GenericOidcConfig {
  *
  * @example Keycloak
  * ```typescript
- * const keycloak = new GenericOidcClient({
+ * const client = new OidcClient({
  *   issuer: 'https://keycloak.example.com/realms/my-realm',
  *   clientId: process.env.KEYCLOAK_CLIENT_ID!,
  *   clientSecret: process.env.KEYCLOAK_CLIENT_SECRET!,
@@ -172,7 +167,7 @@ export interface GenericOidcConfig {
  *
  * @example Auth0 with audience
  * ```typescript
- * const auth0 = new GenericOidcClient({
+ * const client = new OidcClient({
  *   issuer: 'https://your-tenant.auth0.com',
  *   clientId: process.env.AUTH0_CLIENT_ID!,
  *   clientSecret: process.env.AUTH0_CLIENT_SECRET!,
@@ -183,12 +178,34 @@ export interface GenericOidcConfig {
  *   },
  * });
  * ```
+ *
+ * @example Clerk
+ * ```typescript
+ * const client = new OidcClient({
+ *   issuer: 'https://your-app.clerk.accounts.dev',
+ *   clientId: process.env.CLERK_CLIENT_ID!,
+ *   clientSecret: process.env.CLERK_CLIENT_SECRET!,
+ *   redirectUri: 'https://your-app.com/oauth/callback',
+ *   // Note: Clerk doesn't support offline_access
+ *   extractCustomData: (claims) => {
+ *     const data: Record<string, unknown> = {};
+ *     if (claims['org_id']) {
+ *       data.organization = {
+ *         id: claims['org_id'],
+ *         slug: claims['org_slug'],
+ *         role: claims['org_role'],
+ *       };
+ *     }
+ *     return Object.keys(data).length > 0 ? data : undefined;
+ *   },
+ * });
+ * ```
  */
-export class GenericOidcClient implements IdentityProviderClient {
-  private config: GenericOidcConfig;
+export class OidcClient implements IOidcClient {
+  private config: OidcClientConfig;
   private oidcConfig: client.Configuration | null = null;
 
-  constructor(config: GenericOidcConfig) {
+  constructor(config: OidcClientConfig) {
     this.config = config;
   }
 

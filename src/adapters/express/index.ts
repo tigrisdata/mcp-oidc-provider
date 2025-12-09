@@ -14,7 +14,7 @@ export {
 } from './adapter.js';
 export type { ExpressAdapterOptions, ExpressAdapterResult } from './adapter.js';
 
-export { createExpressAuthMiddleware, createOptionalAuthMiddleware } from './middleware.js';
+export { createExpressAuthMiddleware } from './middleware.js';
 export type { ExpressAuthMiddlewareOptions } from './middleware.js';
 
 export { createExpressHttpContext } from './http-context.js';

@@ -3,9 +3,6 @@ import { defineConfig } from 'tsup';
 export default defineConfig({
   entry: {
     index: 'src/index.ts',
-    'auth0/index': 'src/auth0/index.ts',
-    'clerk/index': 'src/clerk/index.ts',
-    'generic/index': 'src/generic/index.ts',
     'adapters/express/index': 'src/adapters/express/index.ts',
     'mcp/index': 'src/mcp/index.ts',
   },
