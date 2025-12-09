@@ -1,13 +1,13 @@
 # Standalone OIDC Server Example
 
-This example demonstrates the **recommended architecture** for production deployments: running the OIDC provider as a standalone server and using the MCP SDK's `ProxyOAuthServerProvider` for your MCP server.
+This example runs the OIDC provider as a standalone server, separate from your MCP server. Use this when you want to share the OIDC server across multiple MCP servers or when your MCP implementation is in a different stack (e.g., Next.js).
 
 ## Architecture
 
 ```
 ┌─────────────────┐     ┌─────────────────┐
 │   MCP Client    │────▶│   MCP Server    │
-│ (Cursor, etc.)  │     │   (port 3001)   │
+│ (Cursor/Claude) │     │   (port 3001)   │
 └─────────────────┘     └────────┬────────┘
                                  │
                                  │ Proxy OAuth
@@ -20,16 +20,16 @@ This example demonstrates the **recommended architecture** for production deploy
                                  │ OAuth Flow
                                  ▼
                         ┌─────────────────┐
-                        │     Auth0       │
+                        │  Auth0/Clerk    │
                         │   (Identity)    │
                         └─────────────────┘
 ```
 
-**Benefits of this architecture:**
+**Benefits:**
+
 - OIDC server can be scaled independently
 - Multiple MCP servers can share the same OIDC server
 - Cleaner separation of concerns
-- Full MCP SDK auth integration
 
 ## Setup
 
@@ -45,10 +45,10 @@ npm install
 cp .env.example .env
 ```
 
-3. Configure your Auth0 application:
-   - Create an application in Auth0
+3. Configure your identity provider (Auth0 or Clerk):
+   - Create an application in your IdP dashboard
    - Set the callback URL to `http://localhost:4001/oauth/callback`
-   - Copy the domain, client ID, and client secret to `.env`
+   - Copy the credentials to `.env`
 
 4. Run the development server:
 
@@ -58,40 +58,42 @@ npm run dev
 
 ## Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `OIDC_PORT` | OIDC server port (default: 4001) |
-| `MCP_PORT` | MCP server port (default: 3001) |
-| `OIDC_BASE_URL` | Public URL of the OIDC server |
-| `MCP_BASE_URL` | Public URL of the MCP server |
-| `SESSION_SECRET` | Secret for session encryption |
-| `AUTH0_DOMAIN` | Your Auth0 tenant domain |
-| `AUTH0_CLIENT_ID` | Auth0 application client ID |
-| `AUTH0_CLIENT_SECRET` | Auth0 application client secret |
-| `AUTH0_AUDIENCE` | Optional API audience |
+| Variable              | Description                          |
+| --------------------- | ------------------------------------ |
+| `OIDC_PORT`           | OIDC server port (default: 4001)     |
+| `MCP_PORT`            | MCP server port (default: 3001)      |
+| `OIDC_BASE_URL`       | Public URL of the OIDC server        |
+| `MCP_BASE_URL`        | Public URL of the MCP server         |
+| `SESSION_SECRET`      | Secret for session encryption        |
+| `AUTH0_DOMAIN`        | Auth0 tenant domain (if using Auth0) |
+| `AUTH0_CLIENT_ID`     | Auth0 client ID (if using Auth0)     |
+| `AUTH0_CLIENT_SECRET` | Auth0 client secret (if using Auth0) |
+| `CLERK_DOMAIN`        | Clerk domain (if using Clerk)        |
+| `CLERK_CLIENT_ID`     | Clerk client ID (if using Clerk)     |
+| `CLERK_CLIENT_SECRET` | Clerk client secret (if using Clerk) |
 
 ## Endpoints
 
 ### OIDC Server (port 4001)
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /authorize` | Authorization endpoint |
-| `POST /token` | Token endpoint |
-| `POST /register` | Dynamic Client Registration |
-| `GET /jwks` | JSON Web Key Set |
-| `GET /.well-known/openid-configuration` | OIDC Discovery |
-| `GET /oauth/callback` | Auth0 callback handler |
-| `GET /health` | Health check |
+| Endpoint                                | Description                 |
+| --------------------------------------- | --------------------------- |
+| `GET /authorize`                        | Authorization endpoint      |
+| `POST /token`                           | Token endpoint              |
+| `POST /register`                        | Dynamic Client Registration |
+| `GET /jwks`                             | JSON Web Key Set            |
+| `GET /.well-known/openid-configuration` | OIDC Discovery              |
+| `GET /oauth/callback`                   | IdP callback handler        |
+| `GET /health`                           | Health check                |
 
 ### MCP Server (port 3001)
 
-| Endpoint | Description |
-|----------|-------------|
-| `POST /mcp` | MCP endpoint (requires authentication) |
-| `GET /.well-known/oauth-authorization-server` | OAuth metadata |
-| `GET /.well-known/oauth-protected-resource` | Protected resource metadata (RFC 9728) |
-| `GET /health` | Health check |
+| Endpoint                                      | Description                  |
+| --------------------------------------------- | ---------------------------- |
+| `POST /mcp`                                   | MCP endpoint (requires auth) |
+| `GET /.well-known/oauth-authorization-server` | OAuth metadata               |
+| `GET /.well-known/oauth-protected-resource`   | Protected resource metadata  |
+| `GET /health`                                 | Health check                 |
 
 ## Key Components
 
@@ -103,12 +105,12 @@ This example uses:
 - **`mcpAuthRouter`** from MCP SDK - OAuth routes for MCP server
 - **`requireBearerAuth`** from MCP SDK - Bearer token middleware
 
-## Usage
+## Testing
 
-Once running, configure your MCP client (Cursor, VS Code, etc.) to connect to:
+Use the MCP Inspector to test the server:
 
+```bash
+npx @modelcontextprotocol/inspector
 ```
-http://localhost:3001/mcp
-```
 
-After authenticating, you can use the `whoami` tool to see your user information.
+Connect to `http://localhost:3001/mcp`, authenticate, then use the `whoami` tool to verify your user information.

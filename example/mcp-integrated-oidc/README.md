@@ -1,12 +1,34 @@
-# MCP OIDC Provider Example
+# Integrated OIDC + MCP Server Example
 
-A minimal MCP server example using `mcp-oidc-provider` with Auth0 authentication.
+This example runs OIDC and MCP in the same Express app. Use this for simple deployments where you don't need to scale the OIDC server independently.
 
-## Features
+## Architecture
 
-- Express.js server with OAuth 2.0/OIDC authentication
-- Auth0 as the identity provider
-- Single MCP tool: `whoami` - returns authenticated user information
+```
+┌─────────────────┐     ┌─────────────────────────┐
+│   MCP Client    │────▶│   Express Server        │
+│ (Cursor/Claude) │     │   (port 3000)           │
+└─────────────────┘     │  ┌───────────────────┐  │
+                        │  │ OIDC Provider     │  │
+                        │  └───────────────────┘  │
+                        │  ┌───────────────────┐  │
+                        │  │ MCP Server        │  │
+                        │  └───────────────────┘  │
+                        └────────────┬────────────┘
+                                     │
+                                     │ OAuth Flow
+                                     ▼
+                        ┌─────────────────────────┐
+                        │      Auth0/Clerk        │
+                        │       (Identity)        │
+                        └─────────────────────────┘
+```
+
+**Benefits:**
+
+- Single deployment unit
+- Simpler configuration
+- Easier to get started
 
 ## Setup
 
@@ -22,10 +44,10 @@ npm install
 cp .env.example .env
 ```
 
-3. Configure your Auth0 application:
-   - Create an application in Auth0
+3. Configure your identity provider (Auth0 or Clerk):
+   - Create an application in your IdP dashboard
    - Set the callback URL to `http://localhost:3000/oauth/callback`
-   - Copy the domain, client ID, and client secret to `.env`
+   - Copy the credentials to `.env`
 
 4. Run the development server:
 
@@ -35,45 +57,52 @@ npm run dev
 
 ## Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `PORT` | Server port (default: 3000) |
-| `BASE_URL` | Public URL of the server |
-| `SESSION_SECRET` | Secret for session encryption |
-| `AUTH0_DOMAIN` | Your Auth0 tenant domain |
-| `AUTH0_CLIENT_ID` | Auth0 application client ID |
-| `AUTH0_CLIENT_SECRET` | Auth0 application client secret |
-| `AUTH0_AUDIENCE` | Optional API audience |
-| `JWKS` | JSON Web Key Set for token signing (required for production) |
+| Variable              | Description                                            |
+| --------------------- | ------------------------------------------------------ |
+| `PORT`                | Server port (default: 3000)                            |
+| `BASE_URL`            | Public URL of the server                               |
+| `SESSION_SECRET`      | Secret for session encryption                          |
+| `AUTH0_DOMAIN`        | Auth0 tenant domain (if using Auth0)                   |
+| `AUTH0_CLIENT_ID`     | Auth0 client ID (if using Auth0)                       |
+| `AUTH0_CLIENT_SECRET` | Auth0 client secret (if using Auth0)                   |
+| `CLERK_DOMAIN`        | Clerk domain (if using Clerk)                          |
+| `CLERK_CLIENT_ID`     | Clerk client ID (if using Clerk)                       |
+| `CLERK_CLIENT_SECRET` | Clerk client secret (if using Clerk)                   |
+| `JWKS`                | JSON Web Key Set for token signing (required for prod) |
 
-## Production Setup
+## Endpoints
 
-For production deployments, you need to generate and persist signing keys:
+| Endpoint                                    | Description                  |
+| ------------------------------------------- | ---------------------------- |
+| `POST /mcp`                                 | MCP endpoint (requires auth) |
+| `GET /authorize`                            | Authorization endpoint       |
+| `POST /token`                               | Token endpoint               |
+| `POST /register`                            | Dynamic Client Registration  |
+| `GET /jwks`                                 | JSON Web Key Set             |
+| `GET /.well-known/openid-configuration`     | OIDC Discovery               |
+| `GET /.well-known/oauth-protected-resource` | Protected resource metadata  |
+| `GET /oauth/callback`                       | IdP callback handler         |
+| `GET /health`                               | Health check                 |
+
+## Production
+
+For production deployments, generate and persist signing keys:
 
 ```bash
-# Generate JWKS (run once, save the output securely)
 node -e "import('mcp-oidc-provider').then(m => m.generateJwks()).then(j => console.log(JSON.stringify(j)))"
 ```
 
-Set the output as the `JWKS` environment variable in your production environment. This ensures:
+Set the output as the `JWKS` environment variable. This ensures:
+
 - Tokens remain valid across server restarts
 - Multiple server instances can verify each other's tokens
 
-## Usage
+## Testing
 
-Once running, the server exposes:
+Use the MCP Inspector to test the server:
 
-- `GET /health` - Health check endpoint
-- `POST /mcp` - MCP endpoint (requires authentication)
-- `GET /.well-known/oauth-protected-resource` - OAuth resource metadata
-- Standard OIDC endpoints (`/authorize`, `/token`, `/jwks`, etc.)
-
-### Testing with an MCP Client
-
-Configure your MCP client (Cursor, VS Code, etc.) to connect to:
-
-```
-http://localhost:3000/mcp
+```bash
+npx @modelcontextprotocol/inspector
 ```
 
-After authenticating, you can use the `whoami` tool to see your user information.
+Connect to `http://localhost:3000/mcp`, authenticate, then use the `whoami` tool to verify your user information.
