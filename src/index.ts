@@ -9,6 +9,8 @@
  * import { createOidcServer } from 'mcp-oidc-provider/express';
  * import { createMcpAuthProvider } from 'mcp-oidc-provider/mcp';
  * import { Auth0Client } from 'mcp-oidc-provider/auth0';
+ * // Or use the generic client for any OIDC provider:
+ * // import { GenericOidcClient } from 'mcp-oidc-provider/generic';
  *
  * const store = new Keyv();
  *

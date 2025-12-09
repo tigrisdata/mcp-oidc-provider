@@ -18,6 +18,10 @@
       "import": "./dist/clerk/index.js",
       "types": "./dist/clerk/index.d.ts"
     },
+    "./generic": {
+      "import": "./dist/generic/index.js",
+      "types": "./dist/generic/index.d.ts"
+    },
     "./express": {
       "import": "./dist/adapters/express/index.js",
       "types": "./dist/adapters/express/index.d.ts"
