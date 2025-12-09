@@ -1,6 +1,6 @@
 # Integrated OIDC + MCP Server Example
 
-This example runs OIDC and MCP in the same Express app. Use this for simpler deployments where you don't need to scale the OIDC server independently.
+This example runs OIDC and MCP in the same Express app. Use this for simple deployments where you don't need to scale the OIDC server independently.
 
 ## Architecture
 

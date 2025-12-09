@@ -35,9 +35,9 @@ npm install mcp-oidc-provider keyv openid-client
 
 ### Option 1: Standalone OIDC Server
 
-That is useful if you already have your MCP implementation in a different stack than express js. You can have the implementation in nextjs lets say, then you can run this server standalone and proxy the Auth requests to this server using the MCP SDK's `ProxyOAuthServerProvider`. See the [standalone-oidc example](./example/standalone-oidc).
+That is useful if you already have your MCP implementation in a different stack than express js. You can have the implementation in nextjs, then you can run this server standalone and proxy the Auth requests to it using the MCP SDK's `ProxyOAuthServerProvider`. See the [standalone-oidc example](./example/standalone-oidc).
 
-Both servers must share the same persistent Keyv store (e.g., Redis, Tigris) so the MCP server can look up tokens issued by the OIDC server.
+Both servers must share the same persistent Keyv store (e.g., Tigris, Redis) so the MCP server can look up tokens issued by the OIDC server.
 
 **auth.ts** - OIDC Server (port 4001)
 
