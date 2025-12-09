@@ -1,19 +1,19 @@
 # mcp-oidc-provider
 
-OIDC provider for MCP (Model Context Protocol) servers with pluggable identity providers.
+OIDC provider for MCP (Model Context Protocol) servers with support for any OIDC-compliant identity provider.
 
-Implementing a [remote hosted MCP server](https://support.claude.com/en/articles/11503834-building-custom-connectors-via-remote-mcp-servers) requires [implementing MCP Authorization Protocol](https://modelcontextprotocol.io/specification/draft/basic/authorization). In theory, this is straightforward because modern applications either implement OAuth specs themselves or use an OAuth-compliant IdP like Auth0 or Clerk. [Long story short](https://www.tigrisdata.com/blog/mcp-oauth/), using your own IdP as-is imposes many limitations.
+Implementing a [remote hosted MCP server](https://support.claude.com/en/articles/11503834-building-custom-connectors-via-remote-mcp-servers) requires [implementing MCP Authorization Protocol](https://modelcontextprotocol.io/specification/draft/basic/authorization). In theory, this is straightforward because modern applications either implement OAuth specs themselves or use an OAuth-compliant IdP like Auth0, Clerk, Okta, or Keycloak. [Long story short](https://www.tigrisdata.com/blog/mcp-oauth/), using your own IdP as-is imposes many limitations.
 
 This package takes care of those limitations for you so you can focus on implementing your tools, resources, and prompts instead of spending hours investigating why your implementation doesn't work with Cursor or logs you out from Claude every few hours.
 
-This package allows you to run either in standalone mode or integrate it into your MCP implementation. It comes with support for Auth0 and Clerk, but you can write your own client implementation and plug it in seamlessly.
+This package allows you to run either in standalone mode or integrate it into your MCP implementation. It works with any OIDC-compliant identity provider like Auth0, Clerk, Okta, Keycloak, Azure AD, Google, and more.
 
 It uses different packages under the hood to glue everything together:
 
 | Package           | Purpose                                                                                                                          |
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | `oidc-provider`   | Core OIDC/OAuth 2.0 server implementation. Handles authorization, token issuance, JWKS, client registration, and all OAuth flows |
-| `openid-client`   | OAuth 2.0/OIDC client library. Used by IdP clients (Auth0, Clerk) to communicate with upstream identity providers                |
+| `openid-client`   | OAuth 2.0/OIDC client library. Used by OidcClient to communicate with upstream identity providers via OIDC Discovery             |
 | `jose`            | JWT signing/verification and JWKS generation. Used for access tokens and ID tokens                                               |
 | `keyv`            | Universal key-value storage abstraction. Used for sessions, tokens, grants, and OIDC adapter data                                |
 | `express`         | Web framework for the Express adapter. Provides routing, middleware, and HTTP handling                                           |
@@ -22,14 +22,18 @@ It uses different packages under the hood to glue everything together:
 ## Installation
 
 ```bash
-npm install mcp-oidc-provider keyv
-```
-
-For Auth0 or Clerk support:
-
-```bash
 npm install mcp-oidc-provider keyv openid-client
 ```
+
+## Generating JWKS
+
+For production, generate and persist signing keys:
+
+```bash
+npx mcp-oidc-generate-jwks --pretty
+```
+
+Store the output securely and provide it via the `jwks` option or `JWKS` environment variable.
 
 ## Quick Start
 
@@ -45,7 +49,7 @@ Both servers must share the same persistent Keyv store (e.g., Tigris, Redis) so 
 import { Keyv } from 'keyv';
 import { KeyvTigris } from '@tigrisdata/keyv-tigris';
 import { createOidcServer } from 'mcp-oidc-provider/express';
-import { Auth0Client } from 'mcp-oidc-provider/auth0';
+import { OidcClient, type JWKS } from 'mcp-oidc-provider';
 
 const OIDC_PORT = 4001;
 const OIDC_BASE_URL = process.env.OIDC_BASE_URL ?? `http://localhost:${OIDC_PORT}`;
@@ -53,17 +57,21 @@ const OIDC_BASE_URL = process.env.OIDC_BASE_URL ?? `http://localhost:${OIDC_PORT
 // Use a persistent store so both servers can access the same data
 const store = new Keyv({ store: new KeyvTigris() });
 
+// Parse JWKS from environment variable (required for production)
+const jwks: JWKS | undefined = process.env.JWKS ? JSON.parse(process.env.JWKS) : undefined;
+
 const oidcServer = createOidcServer({
-  idpClient: new Auth0Client({
-    domain: process.env.AUTH0_DOMAIN!,
-    clientId: process.env.AUTH0_CLIENT_ID!,
-    clientSecret: process.env.AUTH0_CLIENT_SECRET!,
+  idpClient: new OidcClient({
+    issuer: 'https://your-tenant.auth0.com', // or any OIDC issuer
+    clientId: process.env.OIDC_CLIENT_ID!,
+    clientSecret: process.env.OIDC_CLIENT_SECRET!,
     redirectUri: `${OIDC_BASE_URL}/oauth/callback`,
   }),
   store,
   secret: process.env.SESSION_SECRET!,
   port: OIDC_PORT,
   baseUrl: OIDC_BASE_URL,
+  jwks,
 });
 
 await oidcServer.start();
@@ -131,18 +139,22 @@ For simpler deployments where OIDC and MCP run in the same Express app. See the 
 ```typescript
 import { Keyv } from 'keyv';
 import { setupMcpExpress } from 'mcp-oidc-provider/express';
-import { Auth0Client } from 'mcp-oidc-provider/auth0';
+import { OidcClient, type JWKS } from 'mcp-oidc-provider';
+
+// Parse JWKS from environment variable (required for production)
+const jwks: JWKS | undefined = process.env.JWKS ? JSON.parse(process.env.JWKS) : undefined;
 
 const { app, handleMcpRequest } = setupMcpExpress({
-  idpClient: new Auth0Client({
-    domain: process.env.AUTH0_DOMAIN!,
-    clientId: process.env.AUTH0_CLIENT_ID!,
-    clientSecret: process.env.AUTH0_CLIENT_SECRET!,
+  idpClient: new OidcClient({
+    issuer: 'https://your-tenant.auth0.com', // or any OIDC issuer
+    clientId: process.env.OIDC_CLIENT_ID!,
+    clientSecret: process.env.OIDC_CLIENT_SECRET!,
     redirectUri: `${process.env.BASE_URL}/oauth/callback`,
   }),
   store: new Keyv(),
   baseUrl: process.env.BASE_URL!,
   secret: process.env.SESSION_SECRET!,
+  jwks,
 });
 
 // Handle MCP requests - user is available via req.user
@@ -156,19 +168,103 @@ app.listen(3000);
 
 ## Configuration
 
+### OidcClientConfig
+
+The `OidcClient` works with any OIDC-compliant identity provider. It uses [OIDC Discovery](https://openid.net/specs/openid-connect-discovery-1_0.html) to automatically configure endpoints.
+
+| Option                 | Type                                                           | Required | Description                                                       |
+| ---------------------- | -------------------------------------------------------------- | -------- | ----------------------------------------------------------------- |
+| `issuer`               | `string`                                                       | Yes      | OIDC issuer URL (e.g., `https://your-tenant.auth0.com`)           |
+| `clientId`             | `string`                                                       | Yes      | OAuth client ID                                                   |
+| `clientSecret`         | `string`                                                       | Yes      | OAuth client secret                                               |
+| `redirectUri`          | `string`                                                       | Yes      | OAuth callback URL                                                |
+| `scopes`               | `string`                                                       | No       | OAuth scopes (default: `openid email profile`)                    |
+| `additionalAuthParams` | `Record<string, string>`                                       | No       | Additional authorization parameters (e.g., `{ audience: '...' }`) |
+| `extractCustomData`    | `(claims: UserClaims) => Record<string, unknown> \| undefined` | No       | Extract provider-specific data from ID token claims               |
+
+#### Provider Examples
+
+```typescript
+// Auth0
+new OidcClient({
+  issuer: 'https://your-tenant.auth0.com',
+  clientId: process.env.AUTH0_CLIENT_ID!,
+  clientSecret: process.env.AUTH0_CLIENT_SECRET!,
+  redirectUri: 'https://your-app.com/oauth/callback',
+  scopes: 'openid email profile offline_access',
+  additionalAuthParams: { audience: 'https://your-api.com' },
+});
+
+// Clerk (note: doesn't support offline_access)
+new OidcClient({
+  issuer: 'https://your-app.clerk.accounts.dev',
+  clientId: process.env.CLERK_CLIENT_ID!,
+  clientSecret: process.env.CLERK_CLIENT_SECRET!,
+  redirectUri: 'https://your-app.com/oauth/callback',
+  extractCustomData: (claims) => {
+    if (claims['org_id']) {
+      return {
+        organization: {
+          id: claims['org_id'],
+          slug: claims['org_slug'],
+          role: claims['org_role'],
+        },
+      };
+    }
+  },
+});
+
+// Okta
+new OidcClient({
+  issuer: 'https://your-domain.okta.com',
+  clientId: process.env.OKTA_CLIENT_ID!,
+  clientSecret: process.env.OKTA_CLIENT_SECRET!,
+  redirectUri: 'https://your-app.com/oauth/callback',
+  extractCustomData: (claims) => {
+    if (claims['groups']) {
+      return { groups: claims['groups'] };
+    }
+  },
+});
+
+// Keycloak
+new OidcClient({
+  issuer: 'https://keycloak.example.com/realms/my-realm',
+  clientId: process.env.KEYCLOAK_CLIENT_ID!,
+  clientSecret: process.env.KEYCLOAK_CLIENT_SECRET!,
+  redirectUri: 'https://your-app.com/oauth/callback',
+});
+
+// Microsoft Azure AD
+new OidcClient({
+  issuer: `https://login.microsoftonline.com/${tenantId}/v2.0`,
+  clientId: process.env.AZURE_CLIENT_ID!,
+  clientSecret: process.env.AZURE_CLIENT_SECRET!,
+  redirectUri: 'https://your-app.com/oauth/callback',
+});
+
+// Google
+new OidcClient({
+  issuer: 'https://accounts.google.com',
+  clientId: process.env.GOOGLE_CLIENT_ID!,
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+  redirectUri: 'https://your-app.com/oauth/callback',
+});
+```
+
 ### createOidcServer Options
 
-| Option          | Type                     | Required | Description                                  |
-| --------------- | ------------------------ | -------- | -------------------------------------------- |
-| `idpClient`     | `IdentityProviderClient` | Yes      | Identity provider client (e.g., Auth0Client) |
-| `store`         | `Keyv`                   | Yes      | Keyv instance for storage                    |
-| `secret`        | `string`                 | Yes      | Secret for signing cookies/sessions          |
-| `port`          | `number`                 | No       | Port to listen on (default: 4000)            |
-| `baseUrl`       | `string`                 | No       | Base URL of the OIDC server                  |
-| `jwks`          | `JWKS`                   | No       | Custom JWKS for signing tokens               |
-| `isProduction`  | `boolean`                | No       | Production mode flag                         |
-| `sessionMaxAge` | `number`                 | No       | Session max age in ms (default: 30 days)     |
-| `onListen`      | `function`               | No       | Callback when server starts                  |
+| Option          | Type          | Required | Description                              |
+| --------------- | ------------- | -------- | ---------------------------------------- |
+| `idpClient`     | `IOidcClient` | Yes      | OIDC client instance                     |
+| `store`         | `Keyv`        | Yes      | Keyv instance for storage                |
+| `secret`        | `string`      | Yes      | Secret for signing cookies/sessions      |
+| `port`          | `number`      | No       | Port to listen on (default: 4000)        |
+| `baseUrl`       | `string`      | No       | Base URL of the OIDC server              |
+| `jwks`          | `JWKS`        | No       | Custom JWKS for signing tokens           |
+| `isProduction`  | `boolean`     | No       | Production mode flag                     |
+| `sessionMaxAge` | `number`      | No       | Session max age in ms (default: 30 days) |
+| `onListen`      | `function`    | No       | Callback when server starts              |
 
 ### createMcpAuthProvider Options
 
@@ -179,27 +275,6 @@ app.listen(3000);
 | `mcpServerBaseUrl` | `string`   | Yes      | Base URL of your MCP server                                 |
 | `mcpEndpointPath`  | `string`   | No       | MCP endpoint path (default: `/mcp`)                         |
 | `scopesSupported`  | `string[]` | No       | Supported OAuth scopes                                      |
-
-### Auth0Config
-
-| Option         | Type     | Required | Description                                                   |
-| -------------- | -------- | -------- | ------------------------------------------------------------- |
-| `domain`       | `string` | Yes      | Auth0 domain (e.g., `tenant.auth0.com`)                       |
-| `clientId`     | `string` | Yes      | OAuth client ID                                               |
-| `clientSecret` | `string` | Yes      | OAuth client secret                                           |
-| `redirectUri`  | `string` | Yes      | OAuth callback URL                                            |
-| `audience`     | `string` | No       | API audience for access tokens                                |
-| `scopes`       | `string` | No       | OAuth scopes (default: `openid email profile offline_access`) |
-
-### ClerkConfig
-
-| Option         | Type     | Required | Description                                                                                  |
-| -------------- | -------- | -------- | -------------------------------------------------------------------------------------------- |
-| `domain`       | `string` | Yes      | Clerk domain (e.g., `your-app.clerk.accounts.dev` or custom domain)                          |
-| `clientId`     | `string` | Yes      | OAuth client ID (from Clerk Dashboard)                                                       |
-| `clientSecret` | `string` | Yes      | OAuth client secret (from Clerk Dashboard)                                                   |
-| `redirectUri`  | `string` | Yes      | OAuth callback URL                                                                           |
-| `scopes`       | `string` | No       | OAuth scopes (default: `openid email profile`). Note: Clerk doesn't support `offline_access` |
 
 ## Accessing IdP Tokens
 
@@ -247,20 +322,14 @@ You can also access tokens directly if preferred:
 
 ## Custom Identity Provider
 
-Implement the `IdentityProviderClient` interface to support any OIDC-compliant identity provider:
+For advanced use cases, you can implement the `IOidcClient` interface directly:
 
 ```typescript
-import type {
-  IdentityProviderClient,
-  AuthorizationParams,
-  TokenSet,
-  UserClaims,
-} from 'mcp-oidc-provider';
+import type { IOidcClient, AuthorizationParams, TokenSet, UserClaims } from 'mcp-oidc-provider';
 
-class MyIdpClient implements IdentityProviderClient {
+class MyOidcClient implements IOidcClient {
   async createAuthorizationUrl(): Promise<AuthorizationParams> {
     // Generate authorization URL with PKCE, state, and nonce
-    // Scopes should be configured in the constructor
   }
 
   async exchangeCode(
