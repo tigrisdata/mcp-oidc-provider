@@ -5,6 +5,7 @@ export default defineConfig({
     index: 'src/index.ts',
     'adapters/express/index': 'src/adapters/express/index.ts',
     'mcp/index': 'src/mcp/index.ts',
+    'bin/generate-jwks': 'src/bin/generate-jwks.ts',
   },
   format: ['esm'],
   dts: true,

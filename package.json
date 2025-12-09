@@ -19,6 +19,9 @@
       "types": "./dist/mcp/index.d.ts"
     }
   },
+  "bin": {
+    "mcp-oidc-generate-jwks": "./dist/bin/generate-jwks.js"
+  },
   "files": [
     "dist",
     "README.md",
