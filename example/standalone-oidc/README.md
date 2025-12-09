@@ -9,20 +9,20 @@ This example runs the OIDC provider as a standalone server, separate from your M
 │   MCP Client    │────▶│   MCP Server    │
 │ (Cursor/Claude) │     │   (port 3001)   │
 └─────────────────┘     └────────┬────────┘
-                                │
-                                │ Proxy OAuth
-                                ▼
-                       ┌─────────────────┐
-                       │  OIDC Server    │
-                       │  (port 4001)    │
-                       └────────┬────────┘
-                                │
-                                │ OAuth Flow
-                                ▼
-                       ┌─────────────────┐
-                       │  Auth0/Clerk    │
-                       │   (Identity)    │
-                       └─────────────────┘
+                                 │
+                                 │ Proxy OAuth
+                                 ▼
+                        ┌─────────────────┐
+                        │  OIDC Server    │
+                        │  (port 4001)    │
+                        └────────┬────────┘
+                                 │
+                                 │ OAuth Flow
+                                 ▼
+                        ┌─────────────────┐
+                        │  Auth0/Clerk    │
+                        │   (Identity)    │
+                        └─────────────────┘
 ```
 
 **Benefits:**
