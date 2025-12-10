@@ -18,19 +18,19 @@ async function main() {
 
   if (help) {
     console.log(`
-mcp-oidc-generate-jwks - Generate JWKS for mcp-oidc-provider
+mcp-oidc-provider - Generate JWKS for mcp-oidc-provider
 
 Usage:
-  npx mcp-oidc-generate-jwks [options]
+  npx mcp-oidc-provider [options]
 
 Options:
   -p, --pretty    Pretty print the JSON output
   -h, --help      Show this help message
 
 Example:
-  npx mcp-oidc-generate-jwks > jwks.json
-  npx mcp-oidc-generate-jwks --pretty
-  JWKS=$(npx mcp-oidc-generate-jwks)
+  npx mcp-oidc-provider > jwks.json
+  npx mcp-oidc-provider --pretty
+  JWKS=$(npx mcp-oidc-provider)
 
 The generated JWKS should be stored securely and provided to your
 OIDC server via the 'jwks' option or JWKS environment variable.

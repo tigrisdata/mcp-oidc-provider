@@ -100,7 +100,7 @@ export function createOidcProvider(config: OidcProviderConfig): OidcProvider {
   if (!config.jwks) {
     logger.warn(
       'No JWKS provided - using generated development keys. ' +
-        'For production, generate keys using `npx mcp-oidc-generate-jwks` and provide them in the config.'
+        'For production, generate keys using `npx mcp-oidc-provider` and provide them in the config.'
     );
   }
 

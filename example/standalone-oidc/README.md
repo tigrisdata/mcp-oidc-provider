@@ -94,7 +94,7 @@ npm run dev
 For production deployments, generate and persist signing keys:
 
 ```bash
-npx mcp-oidc-generate-jwks --pretty
+npx mcp-oidc-provider --pretty
 ```
 
 Set the output as the `JWKS` environment variable. This ensures:

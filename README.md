@@ -30,7 +30,7 @@ npm install mcp-oidc-provider keyv openid-client
 For production, generate and persist signing keys:
 
 ```bash
-npx mcp-oidc-generate-jwks --pretty
+npx mcp-oidc-provider --pretty
 ```
 
 Store the output securely and provide it via the `jwks` option or `JWKS` environment variable.

@@ -20,7 +20,7 @@
     }
   },
   "bin": {
-    "mcp-oidc-generate-jwks": "./dist/bin/generate-jwks.js"
+    "mcp-oidc-provider": "./dist/bin/generate-jwks.js"
   },
   "files": [
     "dist",
