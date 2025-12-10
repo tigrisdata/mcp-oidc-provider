@@ -52,23 +52,3 @@ export interface KeyValueStore<T = unknown> {
    */
   has?(key: string): Promise<boolean>;
 }
-
-/**
- * Factory function for creating namespaced key-value stores.
- * This allows creating separate stores for different data types.
- *
- * @example
- * ```typescript
- * import Keyv from 'keyv';
- *
- * const createStore: StoreFactory = (namespace, ttl) => {
- *   const keyv = new Keyv({
- *     namespace,
- *     ttl,
- *     store: new KeyvRedis('redis://localhost:6379'),
- *   });
- *   return keyv;
- * };
- * ```
- */
-export type StoreFactory = <T>(namespace: string, ttl?: number) => KeyValueStore<T>;

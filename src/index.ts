@@ -2,22 +2,23 @@
  * mcp-oidc-provider
  *
  * Framework-agnostic OIDC provider for MCP servers with pluggable identity providers.
+ * Works with any OIDC-compliant identity provider (Auth0, Clerk, Okta, Keycloak, Azure AD, Google, etc.)
  *
  * @example Standalone OIDC Server with MCP SDK
  * ```typescript
  * import { Keyv } from 'keyv';
  * import { createOidcServer } from 'mcp-oidc-provider/express';
  * import { createMcpAuthProvider } from 'mcp-oidc-provider/mcp';
- * import { Auth0Client } from 'mcp-oidc-provider/auth0';
+ * import { OidcClient } from 'mcp-oidc-provider';
  *
  * const store = new Keyv();
  *
- * // Create OIDC server
+ * // Create OIDC server with any OIDC provider
  * const oidcServer = createOidcServer({
- *   idpClient: new Auth0Client({
- *     domain: process.env.AUTH0_DOMAIN!,
- *     clientId: process.env.AUTH0_CLIENT_ID!,
- *     clientSecret: process.env.AUTH0_CLIENT_SECRET!,
+ *   idpClient: new OidcClient({
+ *     issuer: 'https://your-tenant.auth0.com', // or any OIDC issuer
+ *     clientId: process.env.OIDC_CLIENT_ID!,
+ *     clientSecret: process.env.OIDC_CLIENT_SECRET!,
  *     redirectUri: 'http://localhost:4001/oauth/callback',
  *   }),
  *   store,
@@ -42,6 +43,10 @@
 // Core provider
 export { createOidcProvider } from './core/provider.js';
 
+// OIDC client for any OIDC-compliant identity provider
+export { OidcClient } from './oidc/client.js';
+export type { OidcClientConfig, ExtractCustomDataFn } from './oidc/client.js';
+
 // Session store utilities
 export { createSessionStore, createExtendedSessionStore } from './core/session-store.js';
 export type { ExtendedSessionStore } from './core/session-store.js';
@@ -57,9 +62,8 @@ export type {
   OidcProvider,
   AuthenticatedUser,
   TokenValidationResult,
-  // Identity provider types
-  IdentityProviderClient,
-  IdentityProviderConfig,
+  // OIDC client interface
+  IOidcClient,
   AuthorizationParams,
   TokenSet,
   UserClaims,

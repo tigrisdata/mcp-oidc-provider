@@ -1,11 +1,5 @@
-// Identity Provider types
-export type {
-  IdentityProviderClient,
-  IdentityProviderConfig,
-  AuthorizationParams,
-  TokenSet,
-  UserClaims,
-} from './idp.js';
+// OIDC client types
+export type { IOidcClient, AuthorizationParams, TokenSet, UserClaims } from './idp.js';
 
 // HTTP abstraction types
 export type {

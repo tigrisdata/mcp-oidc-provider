@@ -51,30 +51,14 @@ export interface UserClaims {
 }
 
 /**
- * Base configuration for identity provider clients
- */
-export interface IdentityProviderConfig {
-  /** The IdP issuer URL (e.g., 'https://your-tenant.auth0.com') */
-  issuer: string;
-  /** OAuth client ID */
-  clientId: string;
-  /** OAuth client secret */
-  clientSecret: string;
-  /** Redirect URI for OAuth callback */
-  redirectUri: string;
-  /** Optional API audience for access tokens */
-  audience?: string;
-}
-
-/**
- * Generic identity provider client interface.
+ * OIDC client interface.
  *
  * Implement this interface to add support for any OIDC-compliant identity provider.
- * Built-in implementations: Auth0Client (from 'mcp-oidc-provider/auth0')
+ * Built-in implementation: OidcClient (from 'mcp-oidc-provider')
  *
  * @example
  * ```typescript
- * class MyIdpClient implements IdentityProviderClient {
+ * class MyOidcClient implements IOidcClient {
  *   async createAuthorizationUrl(): Promise<AuthorizationParams> {
  *     // Generate authorization URL with PKCE using configured scopes
  *   }
@@ -82,7 +66,7 @@ export interface IdentityProviderConfig {
  * }
  * ```
  */
-export interface IdentityProviderClient {
+export interface IOidcClient {
   /**
    * Create an authorization URL for initiating the OAuth flow.
    * Should generate PKCE code verifier/challenge, state, and nonce.

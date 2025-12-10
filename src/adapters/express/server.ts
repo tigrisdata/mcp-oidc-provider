@@ -2,7 +2,7 @@ import express, { type Application, type Request, type Response } from 'express'
 import session from 'express-session';
 import { Keyv } from 'keyv';
 import type { Server } from 'node:http';
-import type { IdentityProviderClient } from '../../types/idp.js';
+import type { IOidcClient } from '../../types/idp.js';
 import type { TokenValidationResult } from '../../types/provider.js';
 import type { KeyvLike } from '../../types/store.js';
 import type { JWKS } from '../../utils/jwks.js';
@@ -16,9 +16,9 @@ import { KeyvSessionStore } from './session-store.js';
  */
 export interface OidcServerOptions {
   /**
-   * Identity provider client (e.g., Auth0Client).
+   * OIDC client for upstream authentication.
    */
-  idpClient: IdentityProviderClient;
+  idpClient: IOidcClient;
 
   /**
    * Keyv instance for storage.
