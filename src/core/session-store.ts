@@ -1,5 +1,4 @@
-import type { KeyValueStore } from '../types/storage.js';
-import type { UserSession, SessionStore } from '../types/session.js';
+import type { KeyValueStore, UserSession, SessionStore } from '../types.js';
 import { DEFAULT_USER_SESSION_TTL_MS } from './config.js';
 
 /**

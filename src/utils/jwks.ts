@@ -1,22 +1,8 @@
 import * as crypto from 'node:crypto';
+import type { JWK, JWKS } from '../types.js';
 
-/**
- * JWK (JSON Web Key) type for signing keys.
- */
-export interface JWK {
-  kty: string;
-  alg?: string;
-  use?: string;
-  kid?: string;
-  [key: string]: unknown;
-}
-
-/**
- * JWKS (JSON Web Key Set) type.
- */
-export interface JWKS {
-  keys: JWK[];
-}
+// Re-export for convenience
+export type { JWK, JWKS };
 
 /**
  * Options for generating JWKS.

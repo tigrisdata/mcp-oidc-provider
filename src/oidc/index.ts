@@ -74,3 +74,16 @@
 
 export { OidcClient } from './client.js';
 export type { OidcClientConfig, ExtractCustomDataFn } from './client.js';
+
+// Standalone OIDC server
+export { createOidcServer } from './server.js';
+export type { OidcServerOptions, OidcServerResult } from './server.js';
+
+// Types (re-exported from foundation)
+export type {
+  IOidcClient,
+  AuthorizationParams,
+  TokenSet,
+  UserClaims,
+  BaseOidcOptions,
+} from '../types.js';

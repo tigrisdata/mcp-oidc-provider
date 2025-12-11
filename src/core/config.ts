@@ -58,3 +58,40 @@ export const DEFAULT_ROUTES = {
   jwks: '/jwks',
   userinfo: '/me',
 };
+
+/**
+ * Storage namespace constants
+ * These are used to namespace data in the Keyv store to prevent collisions.
+ */
+export const STORAGE_NAMESPACES = {
+  /** User sessions containing IdP tokens and claims */
+  USER_SESSIONS: 'user-sessions',
+  /** Temporary interaction sessions during OAuth flow */
+  INTERACTION_SESSIONS: 'interaction-sessions',
+  /** Express session data */
+  EXPRESS_SESSIONS: 'express-sessions',
+  /** OIDC server session data (standalone mode) */
+  OIDC_SERVER_SESSIONS: 'oidc-server-sessions',
+  /** OIDC client registrations */
+  OIDC_CLIENT: 'oidc:Client',
+} as const;
+
+/**
+ * Default JWKS cache options for createRemoteJWKSet
+ */
+export const DEFAULT_JWKS_CACHE_OPTIONS = {
+  /** Minimum time between JWKS fetches (milliseconds). Default: 30 seconds */
+  cooldownDuration: 30_000,
+  /** Maximum age of cached JWKS (milliseconds). Default: 10 minutes */
+  cacheMaxAge: 600_000,
+} as const;
+
+/**
+ * JWKS cache options type
+ */
+export interface JwksCacheOptions {
+  /** Minimum time between JWKS fetches (milliseconds) */
+  cooldownDuration?: number;
+  /** Maximum age of cached JWKS (milliseconds) */
+  cacheMaxAge?: number;
+}

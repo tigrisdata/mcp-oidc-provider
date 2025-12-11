@@ -1,4 +1,4 @@
-import { OidcClient } from 'mcp-oidc-provider';
+import { OidcClient } from 'mcp-oidc-provider/oidc';
 
 export function getIdentityProviderClientFromEnv(baseUrl: string): OidcClient {
   // Generic OIDC provider (works with any OIDC-compliant provider)

@@ -1,7 +1,6 @@
 import express, { Router, type RequestHandler, type Request, type Response } from 'express';
-import type { OidcProvider } from '../../types/provider.js';
-import { createExpressHttpContext } from './http-context.js';
-import { DEFAULT_SCOPES } from '../../core/config.js';
+import type { OidcProvider } from '../core/types.js';
+import { DEFAULT_SCOPES } from '../core/config.js';
 
 /**
  * Options for the Express adapter.
@@ -113,10 +112,11 @@ const PROVIDER_ROUTES = [
  * @param path - The request path to check
  * @returns true if the path is handled by oidc-provider
  *
+ * @internal This is an internal utility used by setupMcpExpress and createOidcServer.
+ *
  * @example
  * ```typescript
  * import express from 'express';
- * import { isOidcProviderRoute } from 'mcp-oidc-provider/express';
  *
  * // Skip body parsing for oidc-provider routes
  * app.use((req, res, next) => {
@@ -145,11 +145,12 @@ export function isOidcProviderRoute(path: string): boolean {
  * @param options - Adapter options
  * @returns Express adapter result
  *
+ * @internal This is an internal utility used by setupMcpExpress and createOidcServer.
+ *
  * @example
  * ```typescript
  * import express from 'express';
  * import { createOidcProvider } from 'mcp-oidc-provider';
- * import { createExpressAdapter } from 'mcp-oidc-provider/express';
  *
  * const app = express();
  * const oidcProvider = createOidcProvider({ ... });
@@ -193,14 +194,12 @@ export function createExpressAdapter(
 
   // Interaction route - handles OAuth authorization flow
   routes.get(`${interactionPath}/:uid`, (req, res) => {
-    const ctx = createExpressHttpContext(req, res);
-    void provider.handleInteraction(ctx);
+    void provider.handleInteraction(req, res);
   });
 
   // IdP callback - handles the response from the identity provider
   routes.get(callbackPath, (req, res) => {
-    const ctx = createExpressHttpContext(req, res);
-    void provider.handleCallback(ctx);
+    void provider.handleCallback(req, res);
   });
 
   // Well-known routes
@@ -294,10 +293,10 @@ export function createExpressAdapter(
  * @param options - Adapter options
  * @returns Express router with all routes
  *
+ * @internal This is an internal utility used by setupMcpExpress and createOidcServer.
+ *
  * @example
  * ```typescript
- * import { createCompleteExpressRouter } from 'mcp-oidc-provider/express';
- *
  * const oauthRouter = createCompleteExpressRouter(oidcProvider);
  * app.use('/oauth', oauthRouter);
  * ```

@@ -129,9 +129,9 @@ Set the output as the `JWKS` environment variable. This ensures:
 
 This example uses:
 
-- **`createOidcServer`** from `mcp-oidc-provider/express` - Standalone OIDC server
+- **`createOidcServer`** from `mcp-oidc-provider/oidc` - Standalone OIDC server
+- **`OidcClient`** from `mcp-oidc-provider/oidc` - Universal OIDC client (works with any provider)
 - **`createMcpAuthProvider`** from `mcp-oidc-provider/mcp` - MCP SDK integration helper
-- **`OidcClient`** from `mcp-oidc-provider` - Universal OIDC client (works with any provider)
 - **`ProxyOAuthServerProvider`** from MCP SDK - Proxies OAuth requests to OIDC server
 - **`mcpAuthRouter`** from MCP SDK - OAuth routes for MCP server
 - **`requireBearerAuth`** from MCP SDK - Bearer token middleware

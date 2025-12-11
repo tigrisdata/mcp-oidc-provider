@@ -1,3 +1,44 @@
+/**
+ * Integrated MCP server setup with built-in OIDC authentication.
+ *
+ * This module provides a complete Express MCP server setup that includes:
+ * - OIDC provider for OAuth authentication
+ * - MCP endpoint with token validation
+ * - Session management
+ * - CORS and health check middleware
+ *
+ * @example
+ * ```typescript
+ * import { Keyv } from 'keyv';
+ * import { setupMcpExpress } from 'mcp-oidc-provider/mcp';
+ * import { OidcClient } from 'mcp-oidc-provider/oidc';
+ *
+ * const { app, handleMcpRequest } = setupMcpExpress({
+ *   idpClient: new OidcClient({
+ *     issuer: 'https://your-tenant.auth0.com',
+ *     clientId: process.env.AUTH0_CLIENT_ID,
+ *     clientSecret: process.env.AUTH0_CLIENT_SECRET,
+ *     redirectUri: `${BASE_URL}/oauth/callback`,
+ *   }),
+ *   store: new Keyv(),
+ *   baseUrl: 'https://your-server.com',
+ *   secret: process.env.SESSION_SECRET,
+ * });
+ *
+ * handleMcpRequest(async (req, res) => {
+ *   // req.user contains the authenticated user
+ *   const transport = new StreamableHTTPServerTransport({ ... });
+ *   const server = createMcpServer(req.user);
+ *   await server.connect(transport);
+ *   await transport.handleRequest(req, res, req.body);
+ * });
+ *
+ * app.listen(3000);
+ * ```
+ *
+ * @packageDocumentation
+ */
+
 import express, {
   type Application,
   type Request,
@@ -6,79 +47,19 @@ import express, {
 } from 'express';
 import session from 'express-session';
 import { Keyv } from 'keyv';
-import type { IOidcClient } from '../../types/idp.js';
-import type { KeyvLike } from '../../types/store.js';
-import type { JWKS } from '../../utils/jwks.js';
-import { createOidcProvider } from '../../core/provider.js';
-import { createExpressAdapter, isOidcProviderRoute } from './adapter.js';
-import { createExpressAuthMiddleware } from './middleware.js';
-import { createMcpCorsMiddleware } from './cors.js';
-import { KeyvSessionStore } from './session-store.js';
+import type { BaseOidcOptions } from '../types.js';
+import { createOidcProvider } from '../core/provider.js';
+import { STORAGE_NAMESPACES } from '../core/config.js';
+import { createExpressAdapter, isOidcProviderRoute } from '../express/adapter.js';
+import { createMcpCorsMiddleware } from '../express/cors.js';
+import { KeyvSessionStore } from '../express/session-store.js';
+import { createExpressAuthMiddleware } from '../express/middleware.js';
 
 /**
  * Options for setting up an Express MCP server.
+ * Extends BaseOidcOptions with MCP-specific options.
  */
-export interface McpExpressSetupOptions {
-  /**
-   * OIDC client for upstream authentication.
-   */
-  idpClient: IOidcClient;
-
-  /**
-   * Keyv instance for storage.
-   * Used for sessions, tokens, grants, and other OIDC data.
-   * Any Keyv instance will work regardless of version.
-   *
-   * @example
-   * ```typescript
-   * // In-memory (development only)
-   * import { Keyv } from 'keyv';
-   * const store = new Keyv();
-   *
-   * // Redis (production)
-   * import KeyvRedis from '@keyv/redis';
-   * const store = new Keyv({ store: new KeyvRedis('redis://localhost:6379') });
-   * ```
-   */
-  store: KeyvLike;
-
-  /**
-   * Base URL of the server.
-   * Used for issuer, CORS, OAuth metadata, and session cookies.
-   */
-  baseUrl: string;
-
-  /**
-   * Secret for signing cookies and sessions.
-   * Use a strong, random value in production.
-   */
-  secret: string;
-
-  /**
-   * Optional JWKS for signing tokens.
-   * If not provided, development keys are generated (with a warning).
-   * In production, generate once using: generateJwks()
-   */
-  jwks?: JWKS;
-
-  /**
-   * Whether running in production mode.
-   * Affects cookie security settings (secure, sameSite).
-   * Default: process.env.NODE_ENV === 'production'
-   */
-  isProduction?: boolean;
-
-  /**
-   * Session max age in milliseconds.
-   * Default: 30 days
-   */
-  sessionMaxAge?: number;
-
-  /**
-   * Additional origins to allow for CORS (beyond MCP Inspector and baseUrl).
-   */
-  additionalCorsOrigins?: string[];
-
+export interface McpExpressSetupOptions extends BaseOidcOptions {
   /**
    * Custom middleware to run after CORS but before other middleware.
    * Useful for request logging, etc.
@@ -162,12 +143,12 @@ export interface McpExpressSetupResult {
  * @example
  * ```typescript
  * import { Keyv } from 'keyv';
- * import { setupMcpExpress } from 'mcp-oidc-provider/express';
- * import { Auth0Client } from 'mcp-oidc-provider/auth0';
+ * import { setupMcpExpress } from 'mcp-oidc-provider/mcp';
+ * import { OidcClient } from 'mcp-oidc-provider/oidc';
  *
  * const { app, handleMcpRequest } = setupMcpExpress({
- *   idpClient: new Auth0Client({
- *     domain: process.env.AUTH0_DOMAIN,
+ *   idpClient: new OidcClient({
+ *     issuer: 'https://your-tenant.auth0.com',
  *     clientId: process.env.AUTH0_CLIENT_ID,
  *     clientSecret: process.env.AUTH0_CLIENT_SECRET,
  *     redirectUri: `${BASE_URL}/oauth/callback`,
@@ -204,7 +185,7 @@ export function setupMcpExpress(options: McpExpressSetupOptions): McpExpressSetu
   const app = express();
   app.set('trust proxy', 1);
 
-  // Create OIDC provider - it handles namespacing internally
+  // Create OIDC provider
   const provider = createOidcProvider({
     issuer: baseUrl,
     idpClient,
@@ -212,6 +193,16 @@ export function setupMcpExpress(options: McpExpressSetupOptions): McpExpressSetu
     cookieSecrets: [secret],
     isProduction,
     jwks,
+  });
+
+  // Get the underlying store for namespaced session storage
+  const underlyingStore = store.opts?.store;
+
+  // Create session store
+  const expressSessionStore = new Keyv({
+    store: underlyingStore,
+    namespace: STORAGE_NAMESPACES.EXPRESS_SESSIONS,
+    ttl: sessionMaxAge,
   });
 
   // Create CORS middleware
@@ -222,16 +213,6 @@ export function setupMcpExpress(options: McpExpressSetupOptions): McpExpressSetu
 
   // Create Express adapter
   const adapter = createExpressAdapter(provider, { baseUrl, mcpPath: '/mcp' });
-
-  // Create auth middleware
-  const authMiddleware = createExpressAuthMiddleware(provider);
-
-  // Create session store from Keyv
-  const expressSessionStore = new Keyv({
-    store: store.opts?.store,
-    namespace: 'express-sessions',
-    ttl: sessionMaxAge,
-  });
 
   // Create session middleware
   const sessionMiddleware = session({
@@ -247,10 +228,10 @@ export function setupMcpExpress(options: McpExpressSetupOptions): McpExpressSetu
     },
   });
 
-  // Create body parser middleware that skips OIDC routes
+  // Body parser that skips OIDC routes
   const bodyParserMiddleware = adapter.bodyParserMiddleware;
 
-  const urlencodedMiddleware: RequestHandler = (req, res, next) => {
+  const urlencodedMiddleware = (req: Request, res: Response, next: () => void) => {
     if (isOidcProviderRoute(req.path)) {
       next();
       return;
@@ -258,37 +239,35 @@ export function setupMcpExpress(options: McpExpressSetupOptions): McpExpressSetu
     express.urlencoded({ extended: true })(req, res, next);
   };
 
-  // Apply middleware in order
-  // 1. Health check (before other middleware for fast response)
+  // Health check (before other middleware for fast response)
   app.get('/health', (_req: Request, res: Response) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
-  // 2. CORS - must be first for preflight requests
+  // Apply middleware in order
   app.use(corsMiddleware);
-
-  // 3. Session management
   app.use(sessionMiddleware);
-
-  // 4. Body parsing
   app.use(bodyParserMiddleware);
   app.use(urlencodedMiddleware);
 
-  // 5. Custom middleware (e.g., request logging)
+  // Apply custom middleware (e.g., request logging)
   for (const middleware of customMiddleware) {
     app.use(middleware);
   }
 
-  // 6. OAuth routes at /oauth
+  // OAuth routes
   app.use('/oauth', adapter.routes);
 
-  // 7. Well-known endpoints at root
+  // Well-known endpoints
   app.use('/', adapter.wellKnownRoutes);
+
+  // Create auth middleware
+  const authMiddleware = createExpressAuthMiddleware(provider);
 
   // Store for the MCP handler
   let mcpHandler: McpRequestHandler | undefined;
 
-  // 8. MCP endpoint with authentication (POST)
+  // MCP endpoint with authentication (POST)
   // req.user is set by authMiddleware
   const mcpPostHandler = async (req: Request, res: Response): Promise<void> => {
     if (!req.user) {
@@ -304,7 +283,7 @@ export function setupMcpExpress(options: McpExpressSetupOptions): McpExpressSetu
     await mcpHandler(req, res);
   };
 
-  // 9. Session handler for GET and DELETE (stateless, no auth)
+  // Session handler for GET and DELETE (stateless, no auth)
   // req.user will be undefined for these requests
   const mcpSessionHandler = async (req: Request, res: Response): Promise<void> => {
     if (!mcpHandler) {
@@ -319,10 +298,10 @@ export function setupMcpExpress(options: McpExpressSetupOptions): McpExpressSetu
   app.get('/mcp', mcpSessionHandler);
   app.delete('/mcp', mcpSessionHandler);
 
-  // 9. OIDC provider at root (must be after custom routes)
+  // OIDC provider (must be after custom routes)
   app.use('/', adapter.providerCallback());
 
-  // 10. 404 handler
+  // 404 handler
   app.use((_req: Request, res: Response) => {
     res.status(404).json({ error: 'Not Found' });
   });

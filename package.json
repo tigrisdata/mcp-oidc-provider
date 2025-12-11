@@ -10,9 +10,9 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
-    "./express": {
-      "import": "./dist/adapters/express/index.js",
-      "types": "./dist/adapters/express/index.d.ts"
+    "./oidc": {
+      "import": "./dist/oidc/index.js",
+      "types": "./dist/oidc/index.d.ts"
     },
     "./mcp": {
       "import": "./dist/mcp/index.js",

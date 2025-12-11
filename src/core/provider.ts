@@ -8,15 +8,15 @@ import { randomUUID } from 'node:crypto';
 import { jwtVerify, createRemoteJWKSet } from 'jose';
 import { Keyv } from 'keyv';
 
+import type { Request, Response } from 'express';
+import type { OidcProviderConfig, OidcProvider } from './types.js';
 import type {
-  OidcProviderConfig,
-  OidcProvider,
   TokenValidationResult,
   AuthenticatedUser,
-} from '../types/provider.js';
-import type { HttpContext } from '../types/http.js';
-import type { UserSession, InteractionSession } from '../types/session.js';
-import type { KeyValueStore } from '../types/storage.js';
+  UserSession,
+  InteractionSession,
+  KeyValueStore,
+} from '../types.js';
 import { createOidcAdapterFactory } from './oidc-adapter.js';
 import { createExtendedSessionStore, type ExtendedSessionStore } from './session-store.js';
 import { createConsoleLogger, type Logger } from '../utils/logger.js';
@@ -34,7 +34,17 @@ import {
   DEFAULT_INTERACTION_TTL,
   DEFAULT_GRANT_TTL,
   DEFAULT_SESSION_TTL,
+  DEFAULT_JWKS_CACHE_OPTIONS,
+  STORAGE_NAMESPACES,
 } from './config.js';
+
+// Extend express-session types
+declare module 'express-session' {
+  interface SessionData {
+    userSessionId?: string;
+    interactionSessionId?: string;
+  }
+}
 
 /**
  * Create a KeyValueStore wrapper around a Keyv instance.
@@ -58,11 +68,16 @@ function createKeyvStore<T>(keyv: Keyv): KeyValueStore<T> {
  * ```typescript
  * import { Keyv } from 'keyv';
  * import { createOidcProvider } from 'mcp-oidc-provider';
- * import { Auth0Client } from 'mcp-oidc-provider/auth0';
+ * import { OidcClient } from 'mcp-oidc-provider/oidc';
  *
  * const provider = createOidcProvider({
  *   issuer: 'https://your-server.com',
- *   idpClient: new Auth0Client({ ... }),
+ *   idpClient: new OidcClient({
+ *     issuer: 'https://your-tenant.auth0.com',
+ *     clientId: process.env.AUTH0_CLIENT_ID,
+ *     clientSecret: process.env.AUTH0_CLIENT_SECRET,
+ *     redirectUri: 'https://your-server.com/oauth/callback',
+ *   }),
  *   store: new Keyv(),
  *   cookieSecrets: ['your-secret'],
  * });
@@ -79,12 +94,12 @@ export function createOidcProvider(config: OidcProviderConfig): OidcProvider {
   // Create namespaced Keyv instances for different data types
   const userSessionKeyv = new Keyv({
     store: underlyingStore,
-    namespace: 'user-sessions',
+    namespace: STORAGE_NAMESPACES.USER_SESSIONS,
     ttl: DEFAULT_USER_SESSION_TTL_MS,
   });
   const interactionSessionKeyv = new Keyv({
     store: underlyingStore,
-    namespace: 'interaction-sessions',
+    namespace: STORAGE_NAMESPACES.INTERACTION_SESSIONS,
     ttl: DEFAULT_INTERACTION_SESSION_TTL_MS,
   });
 
@@ -117,22 +132,30 @@ export function createOidcProvider(config: OidcProviderConfig): OidcProvider {
   overrideRedirectUriValidation(provider, allowedProtocols, logger);
 
   // Create the JWKS for token verification
-  const JWKS = createRemoteJWKSet(new URL(`${config.issuer}/jwks`));
+  const JWKS = createRemoteJWKSet(new URL(`${config.issuer}/jwks`), DEFAULT_JWKS_CACHE_OPTIONS);
 
   return {
     provider,
     sessionStore,
 
-    async handleInteraction(ctx: HttpContext): Promise<void> {
-      await handleInteraction(ctx, provider, config, sessionStore, interactionSessionStore, logger);
+    async handleInteraction(req: Request, res: Response): Promise<void> {
+      await handleInteraction(
+        req,
+        res,
+        provider,
+        config,
+        sessionStore,
+        interactionSessionStore,
+        logger
+      );
     },
 
-    async handleCallback(ctx: HttpContext): Promise<void> {
-      await handleCallback(ctx, config, sessionStore, interactionSessionStore, logger);
+    async handleCallback(req: Request, res: Response): Promise<void> {
+      await handleCallback(req, res, config, sessionStore, interactionSessionStore, logger);
     },
 
     async validateToken(token: string): Promise<TokenValidationResult> {
-      return validateAccessToken(token, provider, config, JWKS, sessionStore, logger);
+      return validateAccessToken(token, config, JWKS, sessionStore, logger);
     },
 
     async refreshIdpTokens(accountId: string): Promise<boolean> {
@@ -313,39 +336,65 @@ function overrideRedirectUriValidation(
 }
 
 /**
+ * Helper to promisify session.regenerate
+ */
+function regenerateSession(req: Request): Promise<void> {
+  return new Promise((resolve, reject) => {
+    req.session?.regenerate((err) => {
+      if (err) reject(err instanceof Error ? err : new Error(String(err)));
+      else resolve();
+    });
+  });
+}
+
+/**
+ * Helper to promisify session.save
+ */
+function saveSession(req: Request): Promise<void> {
+  return new Promise((resolve, reject) => {
+    req.session?.save((err) => {
+      if (err) reject(err instanceof Error ? err : new Error(String(err)));
+      else resolve();
+    });
+  });
+}
+
+/**
+ * Helper to get full URL from Express request
+ */
+function getFullUrl(req: Request): string {
+  const protocol = req.protocol;
+  const host = req.get('host') ?? 'localhost';
+  return `${protocol}://${host}${req.originalUrl}`;
+}
+
+/**
  * Handle the interaction endpoint (login/consent flow).
  */
 async function handleInteraction(
-  ctx: HttpContext,
+  req: Request,
+  res: Response,
   provider: Provider,
   config: OidcProviderConfig,
   sessionStore: ExtendedSessionStore,
   interactionStore: KeyValueStore<InteractionSession>,
   logger: Logger
 ): Promise<void> {
-  const uid = ctx.request.params['uid'];
+  const uid = req.params['uid'];
 
   if (!uid) {
-    ctx.response.status(400).send('Missing interaction UID');
+    res.status(400).send('Missing interaction UID');
     return;
   }
 
   try {
-    // Get interaction details from oidc-provider
-    // Use raw framework objects for oidc-provider compatibility
-    if (!ctx.rawRequest || !ctx.rawResponse) {
-      logger.error('Raw request/response objects not available in context');
-      ctx.response.status(500).send('Internal server error: missing raw request/response');
-      return;
-    }
-
     const interaction = await provider.interactionDetails(
-      ctx.rawRequest as Parameters<typeof provider.interactionDetails>[0],
-      ctx.rawResponse as Parameters<typeof provider.interactionDetails>[1]
+      req as Parameters<typeof provider.interactionDetails>[0],
+      res as Parameters<typeof provider.interactionDetails>[1]
     );
 
     // Check if user is already authenticated
-    const userSessionId = ctx.request.session?.get<string>('userSessionId');
+    const userSessionId = req.session?.userSessionId;
     const userSession = userSessionId ? await sessionStore.get(userSessionId) : undefined;
 
     if (!userSession) {
@@ -355,7 +404,7 @@ async function handleInteraction(
           oldUserSessionId: userSessionId,
           interactionUid: uid,
         });
-        await ctx.request.session?.regenerate();
+        await regenerateSession(req);
       }
 
       const { authorizationUrl, state, nonce, codeVerifier } =
@@ -371,11 +420,13 @@ async function handleInteraction(
       });
 
       // Store session ID in cookie/session
-      ctx.request.session?.set('interactionSessionId', sessionId);
-      await ctx.request.session?.save();
+      if (req.session) {
+        req.session.interactionSessionId = sessionId;
+      }
+      await saveSession(req);
 
       // Redirect to IdP
-      ctx.response.redirect(authorizationUrl);
+      res.redirect(authorizationUrl);
       return;
     }
 
@@ -410,14 +461,14 @@ async function handleInteraction(
     };
 
     await provider.interactionFinished(
-      ctx.rawRequest as Parameters<typeof provider.interactionFinished>[0],
-      ctx.rawResponse as Parameters<typeof provider.interactionFinished>[1],
+      req as Parameters<typeof provider.interactionFinished>[0],
+      res as Parameters<typeof provider.interactionFinished>[1],
       result,
       { mergeWithLastSubmission: true }
     );
   } catch (error) {
     logger.error('Interaction error', error);
-    ctx.response.status(500).send('Internal server error');
+    res.status(500).send('Internal server error');
   }
 }
 
@@ -425,48 +476,49 @@ async function handleInteraction(
  * Handle the IdP callback after user authenticates.
  */
 async function handleCallback(
-  ctx: HttpContext,
+  req: Request,
+  res: Response,
   config: OidcProviderConfig,
   sessionStore: ExtendedSessionStore,
   interactionStore: KeyValueStore<InteractionSession>,
   logger: Logger
 ): Promise<void> {
   logger.info('IdP callback received', {
-    url: ctx.request.originalUrl,
-    hasSession: !!ctx.request.session,
+    url: req.originalUrl,
+    hasSession: !!req.session,
   });
 
   try {
-    const code = ctx.request.query['code'] as string | undefined;
-    const state = ctx.request.query['state'] as string | undefined;
+    const code = req.query['code'] as string | undefined;
+    const state = req.query['state'] as string | undefined;
 
     if (!code || !state) {
-      ctx.response.status(400).send('Missing code or state parameter');
+      res.status(400).send('Missing code or state parameter');
       return;
     }
 
     // Retrieve interaction session
-    const interactionSessionId = ctx.request.session?.get<string>('interactionSessionId');
+    const interactionSessionId = req.session?.interactionSessionId;
     if (!interactionSessionId) {
       logger.error('No interaction session ID found in session');
-      ctx.response.status(400).send('Invalid session - session cookie not found or expired');
+      res.status(400).send('Invalid session - session cookie not found or expired');
       return;
     }
 
     const interactionSession = await interactionStore.get(interactionSessionId);
     if (!interactionSession) {
-      ctx.response.status(400).send('Invalid interaction session');
+      res.status(400).send('Invalid interaction session');
       return;
     }
 
     // Verify state
     if (state !== interactionSession.idpState) {
-      ctx.response.status(400).send('State mismatch');
+      res.status(400).send('State mismatch');
       return;
     }
 
     // Build the full callback URL
-    const callbackUrl = ctx.getFullUrl();
+    const callbackUrl = getFullUrl(req);
 
     // Exchange code for tokens
     const tokenSet = await config.idpClient.exchangeCode(
@@ -504,66 +556,49 @@ async function handleCallback(
     });
 
     // Store user session ID in framework session
-    ctx.request.session?.set('userSessionId', userSessionId);
-    await ctx.request.session?.save();
+    if (req.session) {
+      req.session.userSessionId = userSessionId;
+    }
+    await saveSession(req);
 
     // Clean up interaction session
     await interactionStore.delete(interactionSessionId);
 
     // Redirect back to interaction
-    ctx.response.redirect(`/oauth/interaction/${interactionSession.interactionUid}`);
+    res.redirect(`/oauth/interaction/${interactionSession.interactionUid}`);
   } catch (error) {
     logger.error('IdP callback error', error);
-    ctx.response
+    res
       .status(500)
       .send(`Authentication failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
 /**
- * Validate an access token and return the authenticated user.
+ * Validate an access token (JWT) and return the authenticated user.
  * Automatically refreshes IdP tokens if they are expired or about to expire.
  */
 async function validateAccessToken(
   token: string,
-  provider: Provider,
   config: OidcProviderConfig,
   JWKS: ReturnType<typeof createRemoteJWKSet>,
   sessionStore: ExtendedSessionStore,
   logger: Logger
 ): Promise<TokenValidationResult> {
   try {
-    const isJWT = token.startsWith('eyJ');
+    // Verify JWT signature and decode payload
+    // All tokens are JWTs (configured via accessTokenFormat: 'jwt')
     let accountId: string;
-
-    if (isJWT) {
-      // JWT token - verify and decode
-      try {
-        const { payload } = await jwtVerify(token, JWKS, {
-          issuer: config.issuer,
-          typ: 'at+jwt',
-        });
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        accountId = payload.sub!;
-      } catch (jwtError) {
-        logger.error('JWT verification failed', jwtError);
-        return { valid: false, error: 'Invalid or expired JWT token' };
-      }
-    } else {
-      // Opaque token - look it up in storage
-      try {
-        const accessTokens = provider.AccessToken;
-        const tokenData = await accessTokens.find(token);
-
-        if (!tokenData) {
-          return { valid: false, error: 'Token not found or expired' };
-        }
-
-        accountId = tokenData.accountId;
-      } catch (error) {
-        logger.error('Token lookup error', error);
-        return { valid: false, error: 'Failed to validate access token' };
-      }
+    try {
+      const { payload } = await jwtVerify(token, JWKS, {
+        issuer: config.issuer,
+        typ: 'at+jwt',
+      });
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      accountId = payload.sub!;
+    } catch (jwtError) {
+      logger.error('JWT verification failed', jwtError);
+      return { valid: false, error: 'Invalid or expired token' };
     }
 
     // Get the user session

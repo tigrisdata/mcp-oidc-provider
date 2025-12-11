@@ -113,6 +113,14 @@ Set the output as the `JWKS` environment variable. This ensures:
 - Tokens remain valid across server restarts
 - Multiple server instances can verify each other's tokens
 
+## Key Components
+
+This example uses:
+
+- **`setupMcpExpress`** from `mcp-oidc-provider/mcp` - Complete Express setup with OIDC + MCP
+- **`OidcClient`** from `mcp-oidc-provider/oidc` - Universal OIDC client (works with any provider)
+- **`getIdpTokens`** from `mcp-oidc-provider/mcp` - Helper to access upstream IdP tokens
+
 ## Testing
 
 Use the MCP Inspector to test the server:

@@ -1,7 +1,7 @@
 import * as client from 'openid-client';
 import { randomBytes } from 'node:crypto';
 import { decodeJwt } from 'jose';
-import type { IOidcClient, AuthorizationParams, TokenSet, UserClaims } from '../types/idp.js';
+import type { IOidcClient, AuthorizationParams, TokenSet, UserClaims } from '../types.js';
 
 /**
  * Function type for extracting custom data from ID token claims.
