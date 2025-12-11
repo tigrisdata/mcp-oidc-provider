@@ -153,7 +153,7 @@ export interface McpExpressSetupResult {
  *     clientSecret: process.env.AUTH0_CLIENT_SECRET,
  *     redirectUri: `${BASE_URL}/oauth/callback`,
  *   }),
- *   store: new Keyv(),  // In-memory for dev, use Redis/etc for production
+ *   store: new Keyv(),  // In-memory for dev, use Tigris/Redis for production
  *   baseUrl: 'https://your-server.com',
  *   secret: process.env.SESSION_SECRET,
  * });
