@@ -340,7 +340,11 @@ function overrideRedirectUriValidation(
  */
 function regenerateSession(req: Request): Promise<void> {
   return new Promise((resolve, reject) => {
-    req.session?.regenerate((err) => {
+    if (!req.session) {
+      resolve();
+      return;
+    }
+    req.session.regenerate((err) => {
       if (err) reject(err instanceof Error ? err : new Error(String(err)));
       else resolve();
     });
@@ -352,7 +356,11 @@ function regenerateSession(req: Request): Promise<void> {
  */
 function saveSession(req: Request): Promise<void> {
   return new Promise((resolve, reject) => {
-    req.session?.save((err) => {
+    if (!req.session) {
+      resolve();
+      return;
+    }
+    req.session.save((err) => {
       if (err) reject(err instanceof Error ? err : new Error(String(err)));
       else resolve();
     });
