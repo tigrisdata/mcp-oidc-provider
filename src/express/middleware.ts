@@ -1,17 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
-import type { OidcProvider, AuthenticatedUser } from '../../types/provider.js';
-import type { Logger } from '../../utils/logger.js';
-import { createConsoleLogger } from '../../utils/logger.js';
-
-// Extend Express Request type to include user
-declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
-  namespace Express {
-    interface Request {
-      user?: AuthenticatedUser;
-    }
-  }
-}
+import type { OidcProvider } from '../core/types.js';
+import type { Logger } from '../utils/logger.js';
+import { createConsoleLogger } from '../utils/logger.js';
 
 /**
  * Options for the Express auth middleware.
@@ -47,19 +37,19 @@ export interface ExpressAuthMiddlewareOptions {
  *
  * This middleware:
  * 1. Extracts the Bearer token from the Authorization header
- * 2. Validates the token (JWT or opaque)
+ * 2. Validates the JWT signature using JWKS
  * 3. Loads the user session
- * 4. Optionally refreshes IdP tokens if they're close to expiration
+ * 4. Automatically refreshes IdP tokens if they're close to expiration
  * 5. Attaches the authenticated user to `req.user`
  *
  * @param provider - The OIDC provider instance
  * @param options - Middleware options
  * @returns Express middleware function
  *
+ * @internal This is an internal utility used by setupMcpExpress.
+ *
  * @example
  * ```typescript
- * import { createExpressAuthMiddleware } from 'mcp-oidc-provider/express';
- *
  * const authMiddleware = createExpressAuthMiddleware(oidcProvider);
  * app.use('/api', authMiddleware, apiRoutes);
  * ```

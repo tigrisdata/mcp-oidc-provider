@@ -1,17 +1,19 @@
 import { Store, SessionData } from 'express-session';
-import type { KeyValueStore } from '../../types/storage.js';
+import type { KeyValueStore } from '../types.js';
 
 /**
  * Express session store adapter for Keyv-compatible stores.
- * Allows using any Keyv backend (Redis, Tigris, etc.) as Express session storage.
+ * Allows using any Keyv backend (Tigris, Redis, etc.) as Express session storage.
+ *
+ * @internal This is an internal utility used by setupMcpExpress and createOidcServer.
  *
  * @example
  * ```typescript
  * import session from 'express-session';
- * import Keyv from 'keyv';
- * import { KeyvSessionStore } from 'mcp-oidc-provider/express';
+ * import { Keyv } from 'keyv';
+ * import { KeyvTigris } from '@tigrisdata/keyv-tigris';
  *
- * const keyv = new Keyv('redis://localhost:6379');
+ * const keyv = new Keyv({ store: new KeyvTigris() });
  * const store = new KeyvSessionStore(keyv);
  *
  * app.use(session({

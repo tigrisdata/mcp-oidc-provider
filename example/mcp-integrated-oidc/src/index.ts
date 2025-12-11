@@ -4,8 +4,7 @@ import { KeyvTigris } from '@tigrisdata/keyv-tigris';
 import dotenv from 'dotenv';
 import { Keyv } from 'keyv';
 import { type JWKS } from 'mcp-oidc-provider';
-import { setupMcpExpress } from 'mcp-oidc-provider/express';
-import { getIdpTokens } from 'mcp-oidc-provider/mcp';
+import { setupMcpExpress, getIdpTokens } from 'mcp-oidc-provider/mcp';
 import { getIdentityProviderClientFromEnv } from './idp.js';
 
 // Load environment variables

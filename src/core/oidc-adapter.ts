@@ -1,6 +1,6 @@
 import type { Adapter, AdapterPayload } from 'oidc-provider';
 import { Keyv } from 'keyv';
-import type { KeyvLike } from '../types/store.js';
+import type { KeyvLike } from '../types.js';
 import type { Logger } from '../utils/logger.js';
 
 /**

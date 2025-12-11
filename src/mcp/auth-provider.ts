@@ -8,10 +8,13 @@
 import { Router, type Request, type Response } from 'express';
 import { Keyv } from 'keyv';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
-import { createMcpCorsMiddleware } from '../adapters/express/cors.js';
-import type { KeyvLike } from '../types/store.js';
-import type { UserSession } from '../types/session.js';
-import type { AuthenticatedUser } from '../types/provider.js';
+import { createMcpCorsMiddleware } from '../express/cors.js';
+import {
+  DEFAULT_JWKS_CACHE_OPTIONS,
+  STORAGE_NAMESPACES,
+  type JwksCacheOptions,
+} from '../core/config.js';
+import type { KeyvLike, UserSession, AuthenticatedUser } from '../types.js';
 
 /**
  * Client information stored by oidc-provider.
@@ -75,6 +78,13 @@ export interface McpAuthProviderOptions {
    * Default: ['openid', 'email', 'profile', 'offline_access']
    */
   scopesSupported?: string[];
+
+  /**
+   * JWKS cache options for token verification.
+   * Controls how long the JWKS is cached before being refetched.
+   * Default: { cooldownDuration: 30000, cacheMaxAge: 600000 }
+   */
+  jwksCacheOptions?: JwksCacheOptions;
 }
 
 /**
@@ -173,6 +183,7 @@ export function createMcpAuthProvider(options: McpAuthProviderOptions): McpAuthP
     mcpServerBaseUrl,
     mcpEndpointPath = '/mcp',
     scopesSupported = ['openid', 'email', 'profile', 'offline_access'],
+    jwksCacheOptions,
   } = options;
 
   // Get the underlying store for client lookups
@@ -181,17 +192,20 @@ export function createMcpAuthProvider(options: McpAuthProviderOptions): McpAuthP
   // Create a Keyv instance for client lookups (same namespace as oidc-provider uses)
   const clientStore = new Keyv<ClientInfo>({
     store: underlyingStore,
-    namespace: 'oidc:Client',
+    namespace: STORAGE_NAMESPACES.OIDC_CLIENT,
   });
 
   // Create a Keyv instance for session lookups (same namespace as core provider uses)
   const sessionStore = new Keyv<UserSession>({
     store: underlyingStore,
-    namespace: 'user-sessions',
+    namespace: STORAGE_NAMESPACES.USER_SESSIONS,
   });
 
-  // Create JWKS for JWT verification
-  const JWKS = createRemoteJWKSet(new URL(`${oidcBaseUrl}/jwks`));
+  // Create JWKS for JWT verification with configurable cache options
+  const JWKS = createRemoteJWKSet(new URL(`${oidcBaseUrl}/jwks`), {
+    ...DEFAULT_JWKS_CACHE_OPTIONS,
+    ...jwksCacheOptions,
+  });
 
   // Create the config for ProxyOAuthServerProvider
   const config: ProxyOAuthServerProviderConfig = {

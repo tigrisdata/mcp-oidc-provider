@@ -13,7 +13,7 @@ import dotenv from 'dotenv';
 import { Keyv } from 'keyv';
 import { KeyvTigris } from '@tigrisdata/keyv-tigris';
 
-import { createOidcServer } from 'mcp-oidc-provider/express';
+import { createOidcServer } from 'mcp-oidc-provider/oidc';
 import { getIdentityProviderClientFromEnv } from './idp.js';
 import { type JWKS } from 'mcp-oidc-provider';
 

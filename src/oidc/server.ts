@@ -1,68 +1,57 @@
+/**
+ * Standalone OIDC server for MCP authentication.
+ *
+ * This module provides a standalone Express OIDC server that can be used with
+ * the MCP SDK's ProxyOAuthServerProvider. It handles:
+ * - Dynamic Client Registration
+ * - OAuth 2.0 Authorization Code Flow with PKCE
+ * - Token issuance and validation
+ * - Session management
+ *
+ * @example
+ * ```typescript
+ * import { Keyv } from 'keyv';
+ * import { createOidcServer, OidcClient } from 'mcp-oidc-provider/oidc';
+ *
+ * const server = createOidcServer({
+ *   idpClient: new OidcClient({
+ *     issuer: 'https://your-tenant.auth0.com',
+ *     clientId: process.env.AUTH0_CLIENT_ID,
+ *     clientSecret: process.env.AUTH0_CLIENT_SECRET,
+ *     redirectUri: 'http://localhost:4001/oauth/callback',
+ *   }),
+ *   store: new Keyv(),
+ *   secret: process.env.SESSION_SECRET,
+ *   port: 4001,
+ *   baseUrl: 'http://localhost:4001',
+ * });
+ *
+ * await server.start();
+ * ```
+ *
+ * @packageDocumentation
+ */
+
 import express, { type Application, type Request, type Response } from 'express';
 import session from 'express-session';
 import { Keyv } from 'keyv';
 import type { Server } from 'node:http';
-import type { IOidcClient } from '../../types/idp.js';
-import type { TokenValidationResult } from '../../types/provider.js';
-import type { KeyvLike } from '../../types/store.js';
-import type { JWKS } from '../../utils/jwks.js';
-import { createOidcProvider } from '../../core/provider.js';
-import { createExpressAdapter, isOidcProviderRoute } from './adapter.js';
-import { createMcpCorsMiddleware } from './cors.js';
-import { KeyvSessionStore } from './session-store.js';
+import type { TokenValidationResult, BaseOidcOptions } from '../types.js';
+import { createOidcProvider } from '../core/provider.js';
+import { STORAGE_NAMESPACES } from '../core/config.js';
+import { createExpressAdapter, isOidcProviderRoute } from '../express/adapter.js';
+import { createMcpCorsMiddleware } from '../express/cors.js';
+import { KeyvSessionStore } from '../express/session-store.js';
 
 /**
  * Options for creating a standalone OIDC server.
+ * Extends BaseOidcOptions with server-specific options.
  */
-export interface OidcServerOptions {
-  /**
-   * OIDC client for upstream authentication.
-   */
-  idpClient: IOidcClient;
-
-  /**
-   * Keyv instance for storage.
-   * Any Keyv instance will work regardless of version.
-   */
-  store: KeyvLike;
-
-  /**
-   * Secret for signing cookies and sessions.
-   */
-  secret: string;
-
+export interface OidcServerOptions extends BaseOidcOptions {
   /**
    * Port number for the server to listen on.
    */
   port: number;
-
-  /**
-   * Base URL of this OIDC server (e.g., 'http://localhost:4001').
-   */
-  baseUrl: string;
-
-  /**
-   * Optional JWKS for signing tokens.
-   * If not provided, development keys are generated (with a warning).
-   */
-  jwks?: JWKS;
-
-  /**
-   * Whether running in production mode.
-   * Default: process.env.NODE_ENV === 'production'
-   */
-  isProduction?: boolean;
-
-  /**
-   * Session max age in milliseconds.
-   * Default: 30 days
-   */
-  sessionMaxAge?: number;
-
-  /**
-   * Additional origins to allow for CORS.
-   */
-  additionalCorsOrigins?: string[];
 
   /**
    * Callback when server starts listening.
@@ -111,12 +100,11 @@ export interface OidcServerResult {
  * @example
  * ```typescript
  * import { Keyv } from 'keyv';
- * import { createOidcServer } from 'mcp-oidc-provider/express';
- * import { Auth0Client } from 'mcp-oidc-provider/auth0';
+ * import { createOidcServer, OidcClient } from 'mcp-oidc-provider/oidc';
  *
  * const server = createOidcServer({
- *   idpClient: new Auth0Client({
- *     domain: process.env.AUTH0_DOMAIN,
+ *   idpClient: new OidcClient({
+ *     issuer: 'https://your-tenant.auth0.com',
  *     clientId: process.env.AUTH0_CLIENT_ID,
  *     clientSecret: process.env.AUTH0_CLIENT_SECRET,
  *     redirectUri: 'http://localhost:4001/oauth/callback',
@@ -135,9 +123,9 @@ export interface OidcServerResult {
  *
  * const authProvider = new ProxyOAuthServerProvider({
  *   endpoints: {
- *     authorizationUrl: `${server.baseUrl}/auth`,
+ *     authorizationUrl: `${server.baseUrl}/authorize`,
  *     tokenUrl: `${server.baseUrl}/token`,
- *     registrationUrl: `${server.baseUrl}/reg`,
+ *     registrationUrl: `${server.baseUrl}/register`,
  *   },
  *   verifyAccessToken: async (token) => {
  *     // Verify token with the OIDC server
@@ -181,11 +169,11 @@ export function createOidcServer(options: OidcServerOptions): OidcServerResult {
   // Create session store
   const expressSessionStore = new Keyv({
     store: underlyingStore,
-    namespace: 'oidc-server-sessions',
+    namespace: STORAGE_NAMESPACES.OIDC_SERVER_SESSIONS,
     ttl: sessionMaxAge,
   });
 
-  // Create CORS middleware - allow all origins for standalone server
+  // Create CORS middleware
   const corsMiddleware = createMcpCorsMiddleware({
     baseUrl,
     additionalOrigins: additionalCorsOrigins,
@@ -219,12 +207,12 @@ export function createOidcServer(options: OidcServerOptions): OidcServerResult {
     express.urlencoded({ extended: true })(req, res, next);
   };
 
-  // Health check
+  // Health check (before other middleware for fast response)
   app.get('/health', (_req: Request, res: Response) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
-  // Apply middleware
+  // Apply middleware in order
   app.use(corsMiddleware);
   app.use(sessionMiddleware);
   app.use(bodyParserMiddleware);
@@ -236,7 +224,7 @@ export function createOidcServer(options: OidcServerOptions): OidcServerResult {
   // Well-known endpoints
   app.use('/', adapter.wellKnownRoutes);
 
-  // OIDC provider (must be last)
+  // OIDC provider (must be after custom routes)
   app.use('/', adapter.providerCallback());
 
   // 404 handler

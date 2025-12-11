@@ -3,7 +3,7 @@ import { defineConfig } from 'tsup';
 export default defineConfig({
   entry: {
     index: 'src/index.ts',
-    'adapters/express/index': 'src/adapters/express/index.ts',
+    'oidc/index': 'src/oidc/index.ts',
     'mcp/index': 'src/mcp/index.ts',
     'bin/generate-jwks': 'src/bin/generate-jwks.ts',
   },
