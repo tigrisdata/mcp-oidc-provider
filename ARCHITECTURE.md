@@ -176,7 +176,7 @@ The user runs the CLI command to add your MCP server.
 ┌─────────────────────────────────────────────────────────────────────┐
 │  Terminal                                                           │
 │                                                                     │
-│  $ claude mcp add my-tigris-server https://my-app.com               │
+│  $ claude mcp add my-tigris-server https://mcp.myapp.com/mcp        │
 │                                                                     │
 │  Adding MCP server...                                               │
 │  Authentication required. Opening browser...                        │
@@ -188,7 +188,7 @@ The user runs the CLI command to add your MCP server.
 Claude Code registers itself with your OIDC server. This happens once and is cached.
 
 ```
-Claude Code                                Your Server
+Claude Code                               Your MCP Server
   │                                             │
   │  GET /.well-known/oauth-authorization-server│
   │ ───────────────────────────────────────────►│
@@ -224,7 +224,7 @@ Claude Code                                Your Server
 Claude Code opens a browser window to your authorization endpoint.
 
 ```
-Claude Code                               Your Server
+Claude Code                              Your MCP Server
   │                                            │
   │  Opens browser:                            │
   │  GET /authorize                            │
@@ -255,10 +255,10 @@ Claude Code                               Your Server
 
 ### Step 4: Redirect to Upstream IdP
 
-Your server redirects to Auth0/Clerk for actual authentication.
+Your MCP server redirects to Auth0/Clerk for actual authentication.
 
 ```
-Your Server                                   Auth0/Clerk
+Your MCP Server                               Auth0/Clerk
   │                                               │
   │  Generate PKCE, state, nonce                  │
   │                                               │
@@ -312,10 +312,10 @@ User sees Auth0/Clerk login page and enters credentials.
 
 ### Step 6: IdP Callback - Exchange Code for Tokens
 
-Auth0 redirects back to your server with an authorization code.
+Auth0 redirects back to your MCP server with an authorization code.
 
 ```
-Auth0                                       Your Server
+Auth0                                       Your MCP Server
   │                                               │
   │  302 Redirect                                 │
   │  Location: /oauth/callback?code=idp_code      │
@@ -371,10 +371,10 @@ Auth0                                       Your Server
 
 ### Step 7: Redirect Back to MCP Client with Code
 
-Your server redirects back to Claude Code's local callback server.
+Your MCP server redirects back to Claude Code's local callback server.
 
 ```
-Your Server                               Claude Code
+Your MCP Server                            Claude Code
   │                                            │
   │  302 Redirect                              │
   │  Location: http://127.0.0.1:9876/callback  │
@@ -390,7 +390,7 @@ Your Server                               Claude Code
 Claude Code exchanges the code for access and refresh tokens.
 
 ```
-Claude Code                               Your Server
+Claude Code                              Your MCP Server
   │                                            │
   │  POST /token                               │
   │  {                                         │
@@ -511,22 +511,22 @@ Your tool handler uses the IdP access token to call upstream APIs.
 handleMcpRequest(async (req, res) => {
   const user = req.user; // ← Populated by auth middleware
 
-  // Use IdP access token to call GitHub API
-  const response = await fetch('https://api.tigrisdata.com/buckets', {
+  // Use IdP access token to call Upstream API
+  const response = await fetch('https://api.upstream.com/buckets', {
     headers: {
       Authorization: `Bearer ${user.tokenSet.accessToken}`, // ← IdP token
     },
   });
 
-  const notifications = await response.json();
-  return { notifications };
+  const buckets = await response.json();
+  return { buckets };
 });
 ```
 
 ```
-Your MCP Server                           GitHub API
+Your MCP Server                            Upstream API
   │                                            │
-  │  GET /notifications                        │
+  │  GET /buckets                              │
   │  Authorization: Bearer idp_access_token    │
   │ ──────────────────────────────────────────►│
   │                                            │
@@ -575,7 +575,7 @@ Cookies maintain state during the browser-based OAuth flow (Steps 3-7):
 ```
 
 ```
-Browser                                   Your Server
+Browser                                  Your MCP Server
   │                                            │
   │  GET /authorize?client_id=xyz              │
   │ ──────────────────────────────────────────►│
@@ -646,3 +646,88 @@ After the complete flow, here's what's in your Keyv store:
 ```
 
 ---
+
+## Token Validation
+
+```
+// From src/mcp/auth-provider.ts:221-223
+const { payload } = await jwtVerify(token, JWKS, {
+  issuer: oidcBaseUrl,
+});
+```
+
+The `jwtVerify()` function from the jose library does all of the following:
+
+| Check                  | What It Does                                                       | Fails If                                         |
+| ---------------------- | ------------------------------------------------------------------ | ------------------------------------------------ |
+| Signature Verification | Cryptographically verifies the JWT was signed by a key in the JWKS | Token was tampered with or signed by unknown key |
+| Expiration (exp)       | Checks the token hasn't expired                                    | exp claim is in the past                         |
+| Not Before (nbf)       | Checks the token is already valid                                  | nbf claim is in the future (if present)          |
+| Issuer (iss)           | Checks token was issued by expected OIDC server                    | iss doesn't match oidcBaseUrl                    |
+| Algorithm (alg)        | Ensures the algorithm matches what's expected                      | Algorithm mismatch or none algorithm attack      |
+| Key ID (kid)           | Finds the correct key in JWKS to verify with                       | No matching key found                            |
+
+#### What's NOT Checked (by default)
+
+The current implementation doesn't check:
+
+| Check                | Why Not                                        |
+| -------------------- | ---------------------------------------------- |
+| Audience (aud)       | Not passed to jwtVerify() - could be added     |
+| Token Revocation     | Would require checking a revocation list/store |
+| Real-time IdP status | JWT verification is offline by design          |
+
+Visual: What Happens During Verification
+
+```
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  jwtVerify(token, JWKS, { issuer: oidcBaseUrl })                        │
+  ├─────────────────────────────────────────────────────────────────────────┤
+  │                                                                         │
+  │  Token: eyJhbGciOiJSUzI1NiIsImtpZCI6ImtleS0xMjM0In0.eyJpc3MiOi...       │
+  │                                                                         │
+  │  Step 1: Parse JWT Header                                               │
+  │  ─────────────────────────                                              │
+  │  {                                                                      │
+  │    "alg": "RS256",        ◄── Must be RS256 (not "none"!)               │
+  │    "kid": "key-1234",     ◄── Used to find correct public key           │
+  │    "typ": "at+jwt"                                                      │
+  │  }                                                                      │
+  │                                                                         │
+  │  Step 2: Fetch/Use Cached JWKS                                          │
+  │  ─────────────────────────────                                          │
+  │  Find key with kid="key-1234" in JWKS                                   │
+  │  {                                                                      │
+  │    "keys": [                                                            │
+  │      { "kid": "key-1234", "kty": "RSA", "n": "...", "e": "..." }        │
+  │    ]                                                                    │
+  │  }                                                                      │
+  │                                                                         │
+  │  Step 3: Verify Signature (Cryptographic)                               │
+  │  ─────────────────────────────────────────                              │
+  │  RSA-SHA256(                                                            │
+  │    base64url(header) + "." + base64url(payload),                        │
+  │    publicKey                                                            │
+  │  ) === signature                                                        │
+  │                                                                         │
+  │  ✓ If signature matches → token is authentic (not tampered)             │
+  │  ✗ If signature fails → throw error                                     │
+  │                                                                         │
+  │  Step 4: Verify Claims                                                  │
+  │  ─────────────────────                                                  │
+  │  {                                                                      │
+  │    "iss": "http://localhost:4001",  ◄── Must match oidcBaseUrl ✓        │
+  │    "sub": "user-session-id",                                            │
+  │    "exp": 1704067200,               ◄── Must be in future ✓             │
+  │    "iat": 1704066300,                                                   │
+  │    "client_id": "cursor",                                               │
+  │    "scope": "openid email"                                              │
+  │  }                                                                      │
+  │                                                                         │
+  │  Step 5: Return Payload                                                 │
+  │  ──────────────────────                                                 │
+  │  If all checks pass → return { payload, protectedHeader }               │
+  │  If any check fails → throw JWTVerificationFailed error                 │
+  │                                                                         │
+  └─────────────────────────────────────────────────────────────────────────┘
+```

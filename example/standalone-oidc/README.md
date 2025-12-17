@@ -35,6 +35,8 @@ This example runs the OIDC provider as a standalone server, separate from your M
 
 1. Install dependencies:
 
+Before installing dependencies, replace `"mcp-oidc-provider": "file:../.."` with `"mcp-oidc-provider": "*"`
+
 ```bash
 npm install
 ```
