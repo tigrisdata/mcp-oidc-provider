@@ -1,5 +1,7 @@
 # mcp-oidc-provider
 
+[![NPM Version](https://img.shields.io/npm/v/mcp-oidc-provider 'NPM Version ')](https://www.npmjs.com/package/mcp-oidc-provider)
+
 OIDC provider for MCP (Model Context Protocol) servers with support for any OIDC-compliant identity provider.
 
 Implementing a [remote hosted MCP server](https://support.claude.com/en/articles/11503834-building-custom-connectors-via-remote-mcp-servers) requires [implementing MCP Authorization Protocol](https://modelcontextprotocol.io/specification/draft/basic/authorization). In theory, this is straightforward because modern applications either implement OAuth specs themselves or use an OAuth-compliant IdP like Auth0, Clerk, Okta, or Keycloak. [Long story short](https://www.tigrisdata.com/blog/mcp-oauth/), using your own IdP as-is imposes many limitations.
