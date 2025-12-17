@@ -19,6 +19,13 @@ It uses different packages under the hood to glue everything together:
 | `express`         | Web framework for the Express adapter. Provides routing, middleware, and HTTP handling                                           |
 | `express-session` | Session management for Express. Stores login state during OAuth flows                                                            |
 
+## Further Reading
+
+To better understand the full auth flow when building an MCP server, challenges encountered, and solutions we implemented, take a look at the following detailed blog posts.
+
+- [The man-in-the-middle pattern for MCP server OAuth](https://www.tigrisdata.com/blog/mcp-oauth/)
+- [Open sourcing our MCP OIDC Provider](https://www.tigrisdata.com/blog/mcp-oidc-provider/)
+
 ## Installation
 
 ```bash
@@ -38,6 +45,7 @@ npx mcp-oidc-provider --pretty
 ```
 
 Store the output securely and provide it via the `jwks` option or `JWKS` environment variable. This ensures:
+
 - Tokens remain valid across server restarts
 - All instances in a distributed deployment use the same keys
 
@@ -261,43 +269,43 @@ new OidcClient({
 
 ### createOidcServer Options (from `mcp-oidc-provider/oidc`)
 
-| Option                  | Type          | Required | Description                                    |
-| ----------------------- | ------------- | -------- | ---------------------------------------------- |
-| `idpClient`             | `IOidcClient` | Yes      | OIDC client instance                           |
-| `store`                 | `Keyv`        | Yes      | Keyv instance for storage                      |
-| `secret`                | `string`      | Yes      | Secret for signing cookies/sessions            |
-| `port`                  | `number`      | Yes      | Port to listen on                              |
-| `baseUrl`               | `string`      | Yes      | Base URL of the OIDC server                    |
-| `jwks`                  | `JWKS`        | No       | Custom JWKS for signing tokens                 |
-| `isProduction`          | `boolean`     | No       | Production mode flag                           |
-| `sessionMaxAge`         | `number`      | No       | Session max age in ms (default: 30 days)       |
-| `additionalCorsOrigins` | `string[]`    | No       | Additional origins to allow for CORS           |
-| `onListen`              | `function`    | No       | Callback when server starts                    |
+| Option                  | Type          | Required | Description                              |
+| ----------------------- | ------------- | -------- | ---------------------------------------- |
+| `idpClient`             | `IOidcClient` | Yes      | OIDC client instance                     |
+| `store`                 | `Keyv`        | Yes      | Keyv instance for storage                |
+| `secret`                | `string`      | Yes      | Secret for signing cookies/sessions      |
+| `port`                  | `number`      | Yes      | Port to listen on                        |
+| `baseUrl`               | `string`      | Yes      | Base URL of the OIDC server              |
+| `jwks`                  | `JWKS`        | No       | Custom JWKS for signing tokens           |
+| `isProduction`          | `boolean`     | No       | Production mode flag                     |
+| `sessionMaxAge`         | `number`      | No       | Session max age in ms (default: 30 days) |
+| `additionalCorsOrigins` | `string[]`    | No       | Additional origins to allow for CORS     |
+| `onListen`              | `function`    | No       | Callback when server starts              |
 
 ### setupMcpExpress Options (from `mcp-oidc-provider/mcp`)
 
-| Option                  | Type              | Required | Description                                    |
-| ----------------------- | ----------------- | -------- | ---------------------------------------------- |
-| `idpClient`             | `IOidcClient`     | Yes      | OIDC client instance                           |
-| `store`                 | `Keyv`            | Yes      | Keyv instance for storage                      |
-| `baseUrl`               | `string`          | Yes      | Base URL of the server                         |
-| `secret`                | `string`          | Yes      | Secret for signing cookies/sessions            |
-| `jwks`                  | `JWKS`            | No       | Custom JWKS for signing tokens                 |
-| `isProduction`          | `boolean`         | No       | Production mode flag                           |
-| `sessionMaxAge`         | `number`          | No       | Session max age in ms (default: 30 days)       |
-| `additionalCorsOrigins` | `string[]`        | No       | Additional origins to allow for CORS           |
-| `customMiddleware`      | `RequestHandler[]`| No       | Custom middleware to run after CORS            |
+| Option                  | Type               | Required | Description                              |
+| ----------------------- | ------------------ | -------- | ---------------------------------------- |
+| `idpClient`             | `IOidcClient`      | Yes      | OIDC client instance                     |
+| `store`                 | `Keyv`             | Yes      | Keyv instance for storage                |
+| `baseUrl`               | `string`           | Yes      | Base URL of the server                   |
+| `secret`                | `string`           | Yes      | Secret for signing cookies/sessions      |
+| `jwks`                  | `JWKS`             | No       | Custom JWKS for signing tokens           |
+| `isProduction`          | `boolean`          | No       | Production mode flag                     |
+| `sessionMaxAge`         | `number`           | No       | Session max age in ms (default: 30 days) |
+| `additionalCorsOrigins` | `string[]`         | No       | Additional origins to allow for CORS     |
+| `customMiddleware`      | `RequestHandler[]` | No       | Custom middleware to run after CORS      |
 
 ### createMcpAuthProvider Options (from `mcp-oidc-provider/mcp`)
 
-| Option             | Type              | Required | Description                                                 |
-| ------------------ | ----------------- | -------- | ----------------------------------------------------------- |
-| `oidcBaseUrl`      | `string`          | Yes      | Base URL of the OIDC server (e.g., `http://localhost:4001`) |
-| `store`            | `Keyv`            | Yes      | Same Keyv instance used by OIDC server                      |
-| `mcpServerBaseUrl` | `string`          | Yes      | Base URL of your MCP server                                 |
-| `mcpEndpointPath`  | `string`          | No       | MCP endpoint path (default: `/mcp`)                         |
-| `scopesSupported`  | `string[]`        | No       | Supported OAuth scopes                                      |
-| `jwksCacheOptions` | `JwksCacheOptions`| No       | JWKS cache settings (default: 30s cooldown, 10min cache)    |
+| Option             | Type               | Required | Description                                                 |
+| ------------------ | ------------------ | -------- | ----------------------------------------------------------- |
+| `oidcBaseUrl`      | `string`           | Yes      | Base URL of the OIDC server (e.g., `http://localhost:4001`) |
+| `store`            | `Keyv`             | Yes      | Same Keyv instance used by OIDC server                      |
+| `mcpServerBaseUrl` | `string`           | Yes      | Base URL of your MCP server                                 |
+| `mcpEndpointPath`  | `string`           | No       | MCP endpoint path (default: `/mcp`)                         |
+| `scopesSupported`  | `string[]`         | No       | Supported OAuth scopes                                      |
+| `jwksCacheOptions` | `JwksCacheOptions` | No       | JWKS cache settings (default: 30s cooldown, 10min cache)    |
 
 ## Accessing IdP Tokens
 
