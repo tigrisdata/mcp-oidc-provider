@@ -270,10 +270,12 @@ export function setupMcpExpress(options: McpExpressSetupOptions): McpExpressSetu
   // MCP endpoint with authentication (POST)
   // req.user is set by authMiddleware
   const mcpPostHandler = async (req: Request, res: Response): Promise<void> => {
+    /* c8 ignore start - defensive check, auth middleware always sets req.user or returns 401 */
     if (!req.user) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
+    /* c8 ignore stop */
 
     if (!mcpHandler) {
       res.status(500).json({ error: 'MCP handler not configured' });
