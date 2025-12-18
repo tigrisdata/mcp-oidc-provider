@@ -85,6 +85,13 @@ export interface McpAuthProviderOptions {
    * Default: { cooldownDuration: 30000, cacheMaxAge: 600000 }
    */
   jwksCacheOptions?: JwksCacheOptions;
+
+  /**
+   * Callback for handling errors during token verification.
+   * Useful for logging or monitoring token verification failures.
+   * The error is logged before being converted to InvalidTokenError.
+   */
+  onVerifyError?: (error: unknown) => void;
 }
 
 /**
@@ -184,6 +191,7 @@ export function createMcpAuthProvider(options: McpAuthProviderOptions): McpAuthP
     mcpEndpointPath = '/mcp',
     scopesSupported = ['openid', 'email', 'profile', 'offline_access'],
     jwksCacheOptions,
+    onVerifyError,
   } = options;
 
   // Get the underlying store for client lookups
@@ -242,7 +250,9 @@ export function createMcpAuthProvider(options: McpAuthProviderOptions): McpAuthP
             customData: session?.customData,
           },
         };
-      } catch {
+      } catch (error) {
+        // Call error callback if provided for debugging/logging
+        onVerifyError?.(error);
         throw new InvalidTokenError('Invalid or expired token');
       }
     },

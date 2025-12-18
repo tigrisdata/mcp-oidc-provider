@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import { decodeJwt } from 'jose';
 import type { OidcProvider } from '../core/types.js';
 import type { Logger } from '../utils/logger.js';
 import { createConsoleLogger } from '../utils/logger.js';
@@ -155,22 +156,30 @@ export function createExpressAuthMiddleware(
 
 /**
  * Check if an IdP access token is expiring soon.
+ *
+ * @param accessToken - The JWT access token to check
+ * @param bufferSeconds - Number of seconds before expiration to consider "expiring soon"
+ * @returns true if token expires within buffer time, false otherwise
+ *
+ * @remarks
+ * - If the token cannot be decoded (invalid format), returns false to avoid
+ *   unnecessary refresh attempts on opaque tokens.
+ * - If the token has no `exp` claim, returns false since we cannot determine expiration.
  */
 function isIdpTokenExpiringSoon(accessToken: string, bufferSeconds: number): boolean {
   try {
-    // Decode the JWT to check expiration (without verification)
-    const parts = accessToken.split('.');
-    if (parts.length !== 3) return true;
-
-    const payload = JSON.parse(Buffer.from(parts[1] ?? '', 'base64').toString());
+    // Use jose library for consistent JWT decoding across the codebase
+    const payload = decodeJwt(accessToken);
     const exp = payload.exp;
+
+    // If no expiration claim, assume token doesn't expire (opaque tokens, etc.)
     if (!exp) return false;
 
     // Check if token expires within the buffer time
     const now = Math.floor(Date.now() / 1000);
     return exp <= now + bufferSeconds;
   } catch {
-    // If we can't decode it, assume it doesn't need refresh
+    // If we can't decode it (e.g., opaque token), assume it doesn't need refresh
     return false;
   }
 }
