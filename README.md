@@ -1,8 +1,14 @@
 # mcp-oidc-provider
 
+![GitHub License](https://img.shields.io/github/license/tigrisdata/mcp-oidc-provider)
 [![NPM Version](https://img.shields.io/npm/v/mcp-oidc-provider 'NPM Version ')](https://www.npmjs.com/package/mcp-oidc-provider)
+[![CI](https://github.com/tigrisdata/mcp-oidc-provider/actions/workflows/ci.yml/badge.svg)](https://github.com/tigrisdata/mcp-oidc-provider/actions/workflows/ci.yml)
+![Codecov](https://img.shields.io/codecov/c/github/tigrisdata/mcp-oidc-provider)
+![NPM Downloads](https://img.shields.io/npm/dm/mcp-oidc-provider)
 
-OIDC provider for MCP (Model Context Protocol) servers with support for any OIDC-compliant identity provider.
+## Overview
+
+`mcp-oidc-provider` is an Express middleware that acts as an OIDC provider for MCP (Model Context Protocol) servers with support for any OIDC-compliant identity provider as its backend.
 
 Implementing a [remote hosted MCP server](https://support.claude.com/en/articles/11503834-building-custom-connectors-via-remote-mcp-servers) requires [implementing MCP Authorization Protocol](https://modelcontextprotocol.io/specification/draft/basic/authorization). In theory, this is straightforward because modern applications either implement OAuth specs themselves or use an OAuth-compliant IdP like Auth0, Clerk, Okta, or Keycloak. [Long story short](https://www.tigrisdata.com/blog/mcp-oauth/), using your own IdP as-is imposes many limitations.
 
@@ -20,13 +26,6 @@ It uses different packages under the hood to glue everything together:
 | `keyv`            | Universal key-value storage abstraction. Used for sessions, tokens, grants, and OIDC adapter data                                |
 | `express`         | Web framework for the Express adapter. Provides routing, middleware, and HTTP handling                                           |
 | `express-session` | Session management for Express. Stores login state during OAuth flows                                                            |
-
-## Further Reading
-
-To better understand the full auth flow when building an MCP server, challenges encountered, and solutions we implemented, take a look at the following detailed blog posts.
-
-- [The man-in-the-middle pattern for MCP server OAuth](https://www.tigrisdata.com/blog/mcp-oauth/)
-- [Open sourcing our MCP OIDC Provider](https://www.tigrisdata.com/blog/mcp-oidc-provider/)
 
 ## Installation
 
@@ -46,12 +45,46 @@ JWKS (JSON Web Key Set) contains the keys used to sign access tokens.
 npx mcp-oidc-provider --pretty
 ```
 
+<details>
+<summary>Example output</summary>
+
+```json
+{
+  "keys": [
+    {
+      "kty": "RSA",
+      "n": "[truncated]",
+      "e": "AQAB",
+      "d": "[truncated]",
+      "p": "[truncated]",
+      "q": "[truncated]",
+      "dp": "[truncated]",
+      "dq": "[truncated]",
+      "qi": "[truncated]",
+      "alg": "RS256",
+      "use": "sig",
+      "kid": "52B-rPqOCIyK0Kcsin8GYQ"
+    }
+  ]
+}
+```
+
+</details>
+
 Store the output securely and provide it via the `jwks` option or `JWKS` environment variable. This ensures:
 
 - Tokens remain valid across server restarts
 - All instances in a distributed deployment use the same keys
 
+If you are loading the JWKS from an environment variable, we suggest _not_ using the `--pretty` flag when generating your keys as different application runtimes are known to have strange behaviour when newlines are placed in the contents of environment variables.
+
 ## Quick Start
+
+Choose your deployment:
+
+- **[Standalone OIDC Server](#option-1--standalone-oidc-server)** – Use when your MCP server uses a framework other than Express (e.g., Next.js, Fastify, custom server). The OIDC server runs separately and your MCP server proxies auth requests to it.
+
+- **[Integrated OIDC + MCP](#option-2--mcp-server-with-integrated-oidc)** – Simpler, single Express app hosting both OIDC and MCP in the same process.
 
 ### Option 1: Standalone OIDC Server
 
@@ -60,6 +93,9 @@ That is useful if you already have your MCP implementation in a different stack 
 Both servers must share the same persistent Keyv store (e.g., Tigris, Redis) so the MCP server can look up tokens issued by the OIDC server.
 
 **auth.ts** - OIDC Server (port 4001)
+
+<details>
+<summary>TypeScript code</summary>
 
 ```typescript
 import { Keyv } from 'keyv';
@@ -93,7 +129,12 @@ const oidcServer = createOidcServer({
 await oidcServer.start();
 ```
 
+</details>
+
 **mcp.ts** - MCP Server (port 3001)
+
+<details>
+<summary>TypeScript code</summary>
 
 ```typescript
 import express from 'express';
@@ -148,9 +189,14 @@ mcpApp.post(
 mcpApp.listen(MCP_PORT);
 ```
 
+</details>
+
 ### Option 2: MCP Server with Integrated OIDC
 
 For simpler deployments where OIDC and MCP run in the same Express app. See the [mcp-integrated-oidc example](./example/mcp-integrated-oidc).
+
+<details>
+<summary>TypeScript code</summary>
 
 ```typescript
 import { Keyv } from 'keyv';
@@ -183,7 +229,18 @@ handleMcpRequest(async (req, res) => {
 app.listen(3000);
 ```
 
+</details>
+
 ## Configuration
+
+### Environment Variables
+
+mcp-oidc-provider will read from the following environment variables by default:
+
+| Variable       | Type                    | Description                             |
+| -------------- | ----------------------- | --------------------------------------- |
+| SESSION_SECRET | High-entropy string     | Secret for signing cookies/sessions     |
+| JWKS           | JSON Web Key Set (JSON) | Pre-generated signing keys (production) |
 
 ### OidcClientConfig
 
@@ -414,6 +471,8 @@ const store = new Keyv();
 
 ### [Tigris](https://www.npmjs.com/package/keyv-tigris) (Recommended for Production)
 
+We suggest storing data in a durable globally distributed object storage system like [Tigris](https://tigrisdata.com) for production usecases. This will make your data usable globally, making it trivial for you to scale your MCP server without fear of high latency to your storage backend.
+
 ```typescript
 import { Keyv } from 'keyv';
 import { KeyvTigris } from 'keyv-tigris';
@@ -445,6 +504,17 @@ The provider automatically handles Dynamic Client Registration for MCP clients, 
 - `cursor://` - Cursor IDE
 - `vscode://` - VS Code
 - `windsurf://` - Windsurf
+
+## Feedback & Support
+
+If you encounter any issues, have questions, or want to request features, please [file an issue on GitHub](https://github.com/tigrisdata/mcp-oidc-provider/issues).
+
+## Further Reading
+
+To better understand the full auth flow when building an MCP server, challenges encountered, and solutions we implemented, take a look at the following detailed blog posts.
+
+- [The man-in-the-middle pattern for MCP server OAuth](https://www.tigrisdata.com/blog/mcp-oauth/)
+- [Open sourcing our MCP OIDC Provider](https://www.tigrisdata.com/blog/mcp-oidc-provider/)
 
 ## License
 
