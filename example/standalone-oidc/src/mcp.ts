@@ -18,6 +18,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
 import { ProxyOAuthServerProvider } from '@modelcontextprotocol/sdk/server/auth/providers/proxyProvider.js';
 import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';
+import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { createMcpAuthProvider, getIdpTokens } from 'mcp-oidc-provider/mcp';
 
 dotenv.config();
@@ -74,7 +75,7 @@ mcpApp.post(
   }),
   async (req: Request, res: Response) => {
     // Get auth info from the request (set by requireBearerAuth middleware)
-    const authInfo = req.auth;
+    const authInfo = (req as Request & { auth?: AuthInfo }).auth;
 
     if (!authInfo) {
       res.status(401).json({ error: 'Unauthorized' });
