@@ -5,26 +5,30 @@ import type { Request, Response } from 'express';
 
 // Mock dependencies
 vi.mock('oidc-provider', () => {
-  const mockGrant = vi.fn().mockImplementation(() => ({
-    addOIDCScope: vi.fn(),
-    addResourceScope: vi.fn(),
-    save: vi.fn().mockResolvedValue('grant-id-123'),
-  }));
+  const mockGrant = vi.fn().mockImplementation(function () {
+    return {
+      addOIDCScope: vi.fn(),
+      addResourceScope: vi.fn(),
+      save: vi.fn().mockResolvedValue('grant-id-123'),
+    };
+  });
 
-  const MockProvider = vi.fn().mockImplementation(() => ({
-    proxy: false,
-    callback: vi.fn().mockReturnValue(vi.fn()),
-    interactionDetails: vi.fn().mockResolvedValue({
-      uid: 'interaction-uid',
-      params: {
-        client_id: 'client-123',
-        scope: 'openid email',
-        resource: 'https://api.example.com',
-      },
-    }),
-    interactionFinished: vi.fn().mockResolvedValue(undefined),
-    Grant: mockGrant,
-  }));
+  const MockProvider = vi.fn().mockImplementation(function () {
+    return {
+      proxy: false,
+      callback: vi.fn().mockReturnValue(vi.fn()),
+      interactionDetails: vi.fn().mockResolvedValue({
+        uid: 'interaction-uid',
+        params: {
+          client_id: 'client-123',
+          scope: 'openid email',
+          resource: 'https://api.example.com',
+        },
+      }),
+      interactionFinished: vi.fn().mockResolvedValue(undefined),
+      Grant: mockGrant,
+    };
+  });
 
   // Add Grant to prototype for access
   MockProvider.prototype.Grant = mockGrant;
@@ -47,7 +51,7 @@ describe('provider integration tests', () => {
   beforeEach(() => {
     storedData = new Map();
     const mockUnderlyingStore = {
-      get: vi.fn((key: string) => Promise.resolve(storedData.get(key))),
+      get: vi.fn((key: string) => Promise.resolve(storedData.get(key))) as KeyvLike['get'],
       set: vi.fn((key: string, value: unknown) => {
         storedData.set(key, value);
         return Promise.resolve(true);
@@ -57,7 +61,7 @@ describe('provider integration tests', () => {
     };
 
     mockStore = {
-      get: vi.fn((key: string) => Promise.resolve(storedData.get(key))),
+      get: vi.fn((key: string) => Promise.resolve(storedData.get(key))) as KeyvLike['get'],
       set: vi.fn((key: string, value: unknown) => {
         storedData.set(key, value);
         return Promise.resolve(true);
@@ -1218,13 +1222,13 @@ describe('provider integration tests', () => {
       // Override sessionStore.get to throw after jwtVerify succeeds but during user retrieval
       // We need to make it throw during the token refresh check, which happens later in the flow
       const originalGet = provider.sessionStore.get.bind(provider.sessionStore);
-      provider.sessionStore.get = vi.fn(async (key: string) => {
+      (provider.sessionStore as { get: unknown }).get = vi.fn(async (key: string) => {
         const session = await originalGet(key);
         // Return a session with a getter that throws when accessing claims
         if (session) {
           return {
             ...session,
-            get claims() {
+            get claims(): never {
               throw new Error('Unexpected access error');
             },
           };

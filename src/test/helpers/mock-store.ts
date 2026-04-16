@@ -12,7 +12,7 @@ export function createMockStore(): {
   const storedData = new Map<string, unknown>();
 
   const mockUnderlyingStore = {
-    get: vi.fn((key: string) => Promise.resolve(storedData.get(key))),
+    get: vi.fn((key: string) => Promise.resolve(storedData.get(key))) as KeyvLike['get'],
     set: vi.fn((key: string, value: unknown) => {
       storedData.set(key, value);
       return Promise.resolve(true);
@@ -22,7 +22,7 @@ export function createMockStore(): {
   };
 
   const store: KeyvLike = {
-    get: vi.fn((key: string) => Promise.resolve(storedData.get(key))),
+    get: vi.fn((key: string) => Promise.resolve(storedData.get(key))) as KeyvLike['get'],
     set: vi.fn((key: string, value: unknown) => {
       storedData.set(key, value);
       return Promise.resolve(true);

@@ -23,7 +23,7 @@ const originalConsole = {
 
 beforeAll(() => {
   // Only suppress in CI or when SUPPRESS_LOGS is set
-  if (process.env.CI || process.env.SUPPRESS_LOGS) {
+  if (process.env['CI'] || process.env['SUPPRESS_LOGS']) {
     console.log = vi.fn();
     console.info = vi.fn();
     console.warn = vi.fn();

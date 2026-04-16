@@ -207,7 +207,7 @@ describe('session-store', () => {
 
       // Check that the last call to set used the custom TTL
       const setCalls = vi.mocked(mockStore.set).mock.calls;
-      const lastCall = setCalls[setCalls.length - 1];
+      const lastCall = setCalls[setCalls.length - 1]!;
       expect(lastCall[2]).toBe(customTtl);
     });
 
@@ -220,7 +220,7 @@ describe('session-store', () => {
       await store.updateCustomData('session-1', { foo: 'bar' });
 
       const setCalls = vi.mocked(mockStore.set).mock.calls;
-      const lastCall = setCalls[setCalls.length - 1];
+      const lastCall = setCalls[setCalls.length - 1]!;
       expect(lastCall[2]).toBe(customTtl);
     });
 
