@@ -4,17 +4,21 @@ import type { IOidcClient, KeyvLike } from '../types.js';
 
 // Mock dependencies
 vi.mock('oidc-provider', () => {
-  const MockProvider = vi.fn().mockImplementation(() => ({
-    proxy: false,
-    callback: vi.fn().mockReturnValue(vi.fn()),
-    interactionDetails: vi.fn(),
-    interactionFinished: vi.fn(),
-    Grant: vi.fn().mockImplementation(() => ({
-      addOIDCScope: vi.fn(),
-      addResourceScope: vi.fn(),
-      save: vi.fn().mockResolvedValue('grant-id'),
-    })),
-  }));
+  const MockProvider = vi.fn().mockImplementation(function () {
+    return {
+      proxy: false,
+      callback: vi.fn().mockReturnValue(vi.fn()),
+      interactionDetails: vi.fn(),
+      interactionFinished: vi.fn(),
+      Grant: vi.fn().mockImplementation(function () {
+        return {
+          addOIDCScope: vi.fn(),
+          addResourceScope: vi.fn(),
+          save: vi.fn().mockResolvedValue('grant-id'),
+        };
+      }),
+    };
+  });
 
   // Add Schema mock on prototype
   MockProvider.prototype.Grant = MockProvider;
@@ -37,7 +41,7 @@ describe('provider', () => {
   beforeEach(() => {
     storedData = new Map();
     const mockUnderlyingStore = {
-      get: vi.fn((key: string) => Promise.resolve(storedData.get(key))),
+      get: vi.fn((key: string) => Promise.resolve(storedData.get(key))) as KeyvLike['get'],
       set: vi.fn((key: string, value: unknown) => {
         storedData.set(key, value);
         return Promise.resolve(true);
@@ -47,7 +51,7 @@ describe('provider', () => {
     };
 
     mockStore = {
-      get: vi.fn((key: string) => Promise.resolve(storedData.get(key))),
+      get: vi.fn((key: string) => Promise.resolve(storedData.get(key))) as KeyvLike['get'],
       set: vi.fn((key: string, value: unknown) => {
         storedData.set(key, value);
         return Promise.resolve(true);

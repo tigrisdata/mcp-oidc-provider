@@ -20,7 +20,7 @@ export function createMockRequest(overrides?: Partial<Request>): Partial<Request
     get: vi.fn((name: string) => {
       if (name === 'host') return 'example.com';
       return undefined;
-    }),
+    }) as unknown as Request['get'],
     ...overrides,
   };
 }

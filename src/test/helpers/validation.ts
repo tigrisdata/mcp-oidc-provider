@@ -118,7 +118,7 @@ export function expectValidTokenResponse(response: unknown): void {
   expect(typeof response).toBe('object');
 
   const tokenResponse = response as Record<string, unknown>;
-  expect(tokenResponse.accessToken ?? tokenResponse.access_token).toBeDefined();
+  expect(tokenResponse['accessToken'] ?? tokenResponse['access_token']).toBeDefined();
 }
 
 /**
@@ -129,5 +129,5 @@ export function expectValidUserClaims(claims: unknown): void {
   expect(typeof claims).toBe('object');
 
   const userClaims = claims as Record<string, unknown>;
-  expect(userClaims.sub).toBeDefined();
+  expect(userClaims['sub']).toBeDefined();
 }

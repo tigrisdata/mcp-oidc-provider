@@ -52,7 +52,7 @@ describe('OidcClient', () => {
     it('should create an authorization URL with PKCE', async () => {
       const openidClient = await import('openid-client');
       vi.mocked(openidClient.discovery).mockResolvedValue(
-        {} as ReturnType<typeof openidClient.discovery>
+        {} as Awaited<ReturnType<typeof openidClient.discovery>>
       );
       vi.mocked(openidClient.randomPKCECodeVerifier).mockReturnValue('code-verifier');
       vi.mocked(openidClient.calculatePKCECodeChallenge).mockResolvedValue('code-challenge');
@@ -78,7 +78,7 @@ describe('OidcClient', () => {
     it('should use default scopes if not provided', async () => {
       const openidClient = await import('openid-client');
       vi.mocked(openidClient.discovery).mockResolvedValue(
-        {} as ReturnType<typeof openidClient.discovery>
+        {} as Awaited<ReturnType<typeof openidClient.discovery>>
       );
       vi.mocked(openidClient.randomPKCECodeVerifier).mockReturnValue('code-verifier');
       vi.mocked(openidClient.calculatePKCECodeChallenge).mockResolvedValue('code-challenge');
@@ -106,7 +106,7 @@ describe('OidcClient', () => {
     it('should use custom scopes if provided', async () => {
       const openidClient = await import('openid-client');
       vi.mocked(openidClient.discovery).mockResolvedValue(
-        {} as ReturnType<typeof openidClient.discovery>
+        {} as Awaited<ReturnType<typeof openidClient.discovery>>
       );
       vi.mocked(openidClient.randomPKCECodeVerifier).mockReturnValue('code-verifier');
       vi.mocked(openidClient.calculatePKCECodeChallenge).mockResolvedValue('code-challenge');
@@ -135,7 +135,7 @@ describe('OidcClient', () => {
     it('should include additional auth params', async () => {
       const openidClient = await import('openid-client');
       vi.mocked(openidClient.discovery).mockResolvedValue(
-        {} as ReturnType<typeof openidClient.discovery>
+        {} as Awaited<ReturnType<typeof openidClient.discovery>>
       );
       vi.mocked(openidClient.randomPKCECodeVerifier).mockReturnValue('code-verifier');
       vi.mocked(openidClient.calculatePKCECodeChallenge).mockResolvedValue('code-challenge');
@@ -168,7 +168,7 @@ describe('OidcClient', () => {
     it('should cache OIDC configuration after first call', async () => {
       const openidClient = await import('openid-client');
       vi.mocked(openidClient.discovery).mockResolvedValue(
-        {} as ReturnType<typeof openidClient.discovery>
+        {} as Awaited<ReturnType<typeof openidClient.discovery>>
       );
       vi.mocked(openidClient.randomPKCECodeVerifier).mockReturnValue('code-verifier');
       vi.mocked(openidClient.calculatePKCECodeChallenge).mockResolvedValue('code-challenge');
@@ -192,7 +192,7 @@ describe('OidcClient', () => {
     it('should add https:// prefix if not present', async () => {
       const openidClient = await import('openid-client');
       vi.mocked(openidClient.discovery).mockResolvedValue(
-        {} as ReturnType<typeof openidClient.discovery>
+        {} as Awaited<ReturnType<typeof openidClient.discovery>>
       );
       vi.mocked(openidClient.randomPKCECodeVerifier).mockReturnValue('code-verifier');
       vi.mocked(openidClient.calculatePKCECodeChallenge).mockResolvedValue('code-challenge');
@@ -221,15 +221,15 @@ describe('OidcClient', () => {
     it('should exchange code for tokens', async () => {
       const openidClient = await import('openid-client');
       vi.mocked(openidClient.discovery).mockResolvedValue(
-        {} as ReturnType<typeof openidClient.discovery>
+        {} as Awaited<ReturnType<typeof openidClient.discovery>>
       );
       vi.mocked(openidClient.authorizationCodeGrant).mockResolvedValue({
         access_token: 'access-token',
         id_token: 'id-token',
         refresh_token: 'refresh-token',
         expires_in: 3600,
-        token_type: 'Bearer',
-      });
+        token_type: 'bearer' as Lowercase<string>,
+      } as Awaited<ReturnType<typeof openidClient.authorizationCodeGrant>>);
 
       const client = new OidcClient({
         issuer: 'https://auth.example.com',
@@ -249,17 +249,18 @@ describe('OidcClient', () => {
       expect(result.idToken).toBe('id-token');
       expect(result.refreshToken).toBe('refresh-token');
       expect(result.expiresIn).toBe(3600);
-      expect(result.tokenType).toBe('Bearer');
+      expect(result.tokenType).toBe('bearer');
     });
 
     it('should handle missing optional tokens', async () => {
       const openidClient = await import('openid-client');
       vi.mocked(openidClient.discovery).mockResolvedValue(
-        {} as ReturnType<typeof openidClient.discovery>
+        {} as Awaited<ReturnType<typeof openidClient.discovery>>
       );
       vi.mocked(openidClient.authorizationCodeGrant).mockResolvedValue({
         access_token: 'access-token',
-      });
+        token_type: 'bearer' as Lowercase<string>,
+      } as Awaited<ReturnType<typeof openidClient.authorizationCodeGrant>>);
 
       const client = new OidcClient({
         issuer: 'https://auth.example.com',
@@ -284,15 +285,15 @@ describe('OidcClient', () => {
     it('should refresh tokens', async () => {
       const openidClient = await import('openid-client');
       vi.mocked(openidClient.discovery).mockResolvedValue(
-        {} as ReturnType<typeof openidClient.discovery>
+        {} as Awaited<ReturnType<typeof openidClient.discovery>>
       );
       vi.mocked(openidClient.refreshTokenGrant).mockResolvedValue({
         access_token: 'new-access-token',
         id_token: 'new-id-token',
         refresh_token: 'new-refresh-token',
         expires_in: 3600,
-        token_type: 'Bearer',
-      });
+        token_type: 'bearer' as Lowercase<string>,
+      } as Awaited<ReturnType<typeof openidClient.refreshTokenGrant>>);
 
       const client = new OidcClient({
         issuer: 'https://auth.example.com',

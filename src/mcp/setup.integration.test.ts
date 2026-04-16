@@ -7,12 +7,14 @@ import { createMockStore, createMockIdpClient, storeUserSession } from '../test/
 
 // Mock dependencies
 vi.mock('oidc-provider', () => {
-  const MockProvider = vi.fn().mockImplementation(() => ({
-    proxy: false,
-    callback: vi.fn().mockReturnValue((_req: unknown, _res: unknown, next: () => void) => next()),
-    interactionDetails: vi.fn(),
-    interactionFinished: vi.fn(),
-  }));
+  const MockProvider = vi.fn().mockImplementation(function () {
+    return {
+      proxy: false,
+      callback: vi.fn().mockReturnValue((_req: unknown, _res: unknown, next: () => void) => next()),
+      interactionDetails: vi.fn(),
+      interactionFinished: vi.fn(),
+    };
+  });
 
   return {
     default: MockProvider,

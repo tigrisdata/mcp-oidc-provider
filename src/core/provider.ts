@@ -400,7 +400,8 @@ async function handleInteraction(
   interactionStore: KeyValueStore<InteractionSession>,
   logger: Logger
 ): Promise<void> {
-  const uid = req.params['uid'];
+  const rawUid = req.params['uid'];
+  const uid = Array.isArray(rawUid) ? rawUid[0] : rawUid;
 
   if (!uid) {
     res.status(400).send('Missing interaction UID');

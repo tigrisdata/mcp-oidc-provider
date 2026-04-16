@@ -10,7 +10,7 @@ describe('oidc-adapter', () => {
   beforeEach(() => {
     storedData = new Map();
     const mockUnderlyingStore = {
-      get: vi.fn((key: string) => Promise.resolve(storedData.get(key))),
+      get: vi.fn((key: string) => Promise.resolve(storedData.get(key))) as KeyvLike['get'],
       set: vi.fn((key: string, value: unknown) => {
         storedData.set(key, value);
         return Promise.resolve(true);
@@ -27,7 +27,7 @@ describe('oidc-adapter', () => {
     };
 
     mockStore = {
-      get: vi.fn((key: string) => Promise.resolve(storedData.get(key))),
+      get: vi.fn((key: string) => Promise.resolve(storedData.get(key))) as KeyvLike['get'],
       set: vi.fn((key: string, value: unknown) => {
         storedData.set(key, value);
         return Promise.resolve(true);
