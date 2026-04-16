@@ -3,7 +3,6 @@
 ![GitHub License](https://img.shields.io/github/license/tigrisdata/mcp-oidc-provider)
 [![NPM Version](https://img.shields.io/npm/v/mcp-oidc-provider 'NPM Version ')](https://www.npmjs.com/package/mcp-oidc-provider)
 [![CI](https://github.com/tigrisdata/mcp-oidc-provider/actions/workflows/ci.yml/badge.svg)](https://github.com/tigrisdata/mcp-oidc-provider/actions/workflows/ci.yml)
-![Codecov](https://img.shields.io/codecov/c/github/tigrisdata/mcp-oidc-provider)
 ![NPM Downloads](https://img.shields.io/npm/dm/mcp-oidc-provider)
 
 ## Overview
