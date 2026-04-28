@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@tigrisdata/keyv-tigris": "^1.1.2",
+    "@tigrisdata/keyv-tigris": "^1.1.3",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-session": "^1.19.0",
@@ -20,8 +20,8 @@
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
-    "@types/express-session": "^1.18.2",
-    "@types/node": "^22.0.0",
+    "@types/express-session": "^1.19.0",
+    "@types/node": "^25.6.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.0"
   }

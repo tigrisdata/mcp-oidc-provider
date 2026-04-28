@@ -68,8 +68,8 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "jose": "^6.2.2",
-    "oidc-provider": "^9.8.1"
+    "jose": "^6.2.3",
+    "oidc-provider": "^9.8.3"
   },
   "release": {
     "branches": [
@@ -105,10 +105,10 @@
     }
   },
   "optionalDependencies": {
-    "openid-client": "^6.8.3"
+    "openid-client": "^6.8.4"
   },
   "devDependencies": {
-    "@commitlint/cli": "^20.5.0",
+    "@commitlint/cli": "^20.5.2",
     "@commitlint/config-conventional": "^20.5.0",
     "@eslint/js": "^10.0.1",
     "@semantic-release/changelog": "^6.0.3",
@@ -117,12 +117,12 @@
     "@semantic-release/npm": "^13.1.5",
     "@semantic-release/release-notes-generator": "^14.1.0",
     "@types/express": "^5.0.6",
-    "@types/express-session": "^1.18.2",
+    "@types/express-session": "^1.19.0",
     "@types/node": "^25.6.0",
     "@types/oidc-provider": "^9.5.0",
     "@types/supertest": "^7.2.0",
-    "@vitest/coverage-v8": "^4.1.4",
-    "eslint": "^10.2.0",
+    "@vitest/coverage-v8": "^4.1.5",
+    "eslint": "^10.2.1",
     "express": "^5.2.1",
     "express-session": "^1.19.0",
     "husky": "^9.1.7",
@@ -132,7 +132,7 @@
     "supertest": "^7.2.2",
     "tsup": "^8.5.1",
     "typescript": "^5.9.0",
-    "typescript-eslint": "^8.58.2",
-    "vitest": "^4.1.4"
+    "typescript-eslint": "^8.59.1",
+    "vitest": "^4.1.5"
   }
 }
