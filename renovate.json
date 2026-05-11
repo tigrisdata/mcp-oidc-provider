@@ -2,11 +2,10 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended",
-    ":dependencyDashboard",
     ":semanticCommitTypeAll(chore)"
   ],
   "timezone": "UTC",
-  "schedule": ["before 9am on monday"],
+  "schedule": ["* 0-8 * * 1"],
   "prConcurrentLimit": 5,
   "prHourlyLimit": 2,
   "labels": ["dependencies"],
