@@ -9,6 +9,10 @@
   "prConcurrentLimit": 5,
   "prHourlyLimit": 2,
   "labels": ["dependencies"],
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "schedule": ["at any time"]
+  },
   "packageRules": [
     {
       "description": "Bundle all minor and patch updates (npm, GitHub Actions, Docker) into a single weekly PR",
