@@ -91,7 +91,7 @@
   "peerDependencies": {
     "express": "^4.0.0 || ^5.0.0",
     "express-session": "^1.18.0",
-    "keyv": "^5.0.0"
+    "keyv": "^5.0.0 || ^6.0.0"
   },
   "peerDependenciesMeta": {
     "express": {
@@ -126,11 +126,11 @@
     "express": "^5.2.1",
     "express-session": "^1.19.0",
     "husky": "^9.1.7",
-    "keyv": "^5.6.0",
+    "keyv": "^6.0.0",
     "prettier": "^3.8.3",
     "semantic-release": "^25.0.3",
     "supertest": "^7.2.2",
-    "tsup": "^8.5.1",
+    "tsup": "^9.0.0",
     "typescript": "^5.9.0",
     "typescript-eslint": "^8.59.1",
     "vitest": "^5.0.0"
