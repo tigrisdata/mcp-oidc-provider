@@ -21,6 +21,7 @@ vi.mock('oidc-provider', () => {
 
 vi.mock('jose', () => ({
   createRemoteJWKSet: vi.fn(() => vi.fn()),
+  createLocalJWKSet: vi.fn(() => vi.fn()),
   jwtVerify: vi.fn(),
 }));
 

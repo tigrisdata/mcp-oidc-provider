@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateJwks, generateDevJwks } from './jwks.js';
+import { generateJwks, generateDevJwks, toPublicJwks } from './jwks.js';
 
 describe('jwks', () => {
   describe('generateJwks', () => {
@@ -113,6 +113,41 @@ describe('jwks', () => {
       await expect(generateJwks({ algorithm: 'INVALID' as 'RS256' })).rejects.toThrow(
         'Unsupported algorithm: INVALID'
       );
+    });
+  });
+
+  describe('toPublicJwks', () => {
+    it('should strip private members from RSA keys', async () => {
+      const jwks = await generateJwks();
+      const publicJwks = toPublicJwks(jwks);
+
+      const key = publicJwks.keys[0]!;
+      expect(key.kty).toBe('RSA');
+      expect(key.kid).toBe(jwks.keys[0]!.kid);
+      expect(key.alg).toBe('RS256');
+      expect(key.use).toBe('sig');
+      expect(key['n']).toBeDefined();
+      expect(key['e']).toBeDefined();
+      for (const member of ['d', 'p', 'q', 'dp', 'dq', 'qi']) {
+        expect(key[member]).toBeUndefined();
+      }
+    });
+
+    it('should strip private members from EC keys', async () => {
+      const jwks = await generateJwks({ algorithm: 'ES256' });
+      const key = toPublicJwks(jwks).keys[0]!;
+
+      expect(key.kty).toBe('EC');
+      expect(key['x']).toBeDefined();
+      expect(key['y']).toBeDefined();
+      expect(key['d']).toBeUndefined();
+    });
+
+    it('should not mutate the input', async () => {
+      const jwks = await generateJwks();
+      toPublicJwks(jwks);
+
+      expect(jwks.keys[0]!['d']).toBeDefined();
     });
   });
 });

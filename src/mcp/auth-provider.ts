@@ -7,14 +7,21 @@
 
 import { Router, type Request, type Response } from 'express';
 import { Keyv } from 'keyv';
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import {
+  createLocalJWKSet,
+  createRemoteJWKSet,
+  jwtVerify,
+  type JWTVerifyGetKey,
+  type JSONWebKeySet,
+} from 'jose';
 import { createMcpCorsMiddleware } from '../express/cors.js';
 import {
   DEFAULT_JWKS_CACHE_OPTIONS,
   STORAGE_NAMESPACES,
   type JwksCacheOptions,
 } from '../core/config.js';
-import type { KeyvLike, UserSession, AuthenticatedUser } from '../types.js';
+import type { KeyvLike, UserSession, AuthenticatedUser, JWKS } from '../types.js';
+import { toPublicJwks } from '../utils/jwks.js';
 
 /**
  * Client information stored by oidc-provider.
@@ -80,8 +87,17 @@ export interface McpAuthProviderOptions {
   scopesSupported?: string[];
 
   /**
+   * The signing JWKS of the OIDC server.
+   * When provided, tokens are verified against the public half of these keys
+   * and the `/jwks` endpoint is never fetched. Pass the same JWKS given to the
+   * OIDC server.
+   */
+  jwks?: JWKS;
+
+  /**
    * JWKS cache options for token verification.
    * Controls how long the JWKS is cached before being refetched.
+   * Only used when `jwks` is not provided.
    * Default: { cooldownDuration: 30000, cacheMaxAge: 600000 }
    */
   jwksCacheOptions?: JwksCacheOptions;
@@ -190,6 +206,7 @@ export function createMcpAuthProvider(options: McpAuthProviderOptions): McpAuthP
     mcpServerBaseUrl,
     mcpEndpointPath = '/mcp',
     scopesSupported = ['openid', 'email', 'profile', 'offline_access'],
+    jwks,
     jwksCacheOptions,
     onVerifyError,
   } = options;
@@ -209,11 +226,14 @@ export function createMcpAuthProvider(options: McpAuthProviderOptions): McpAuthP
     namespace: STORAGE_NAMESPACES.USER_SESSIONS,
   });
 
-  // Create JWKS for JWT verification with configurable cache options
-  const JWKS = createRemoteJWKSet(new URL(`${oidcBaseUrl}/jwks`), {
-    ...DEFAULT_JWKS_CACHE_OPTIONS,
-    ...jwksCacheOptions,
-  });
+  // Verify against the signing keys when they are available; otherwise fetch
+  // the OIDC server's /jwks with configurable cache options
+  const JWKS: JWTVerifyGetKey = jwks
+    ? createLocalJWKSet(toPublicJwks(jwks) as JSONWebKeySet)
+    : createRemoteJWKSet(new URL(`${oidcBaseUrl}/jwks`), {
+        ...DEFAULT_JWKS_CACHE_OPTIONS,
+        ...jwksCacheOptions,
+      });
 
   // Create the config for ProxyOAuthServerProvider
   const config: ProxyOAuthServerProviderConfig = {

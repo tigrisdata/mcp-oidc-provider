@@ -90,6 +90,27 @@ export async function generateJwks(options?: GenerateJwksOptions): Promise<JWKS>
   return { keys: [jwk] };
 }
 
+const PRIVATE_JWK_MEMBERS = ['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth', 'k'] as const;
+
+/**
+ * The public half of a JWKS: the same keys with every private member removed.
+ *
+ * Token verification only needs the public keys, so the verifier can be built
+ * from the signing keys already in memory instead of fetching the issuer's
+ * `/jwks` endpoint over the network.
+ */
+export function toPublicJwks(jwks: JWKS): JWKS {
+  return {
+    keys: jwks.keys.map((key) => {
+      const publicKey: JWK = { ...key };
+      for (const member of PRIVATE_JWK_MEMBERS) {
+        delete publicKey[member];
+      }
+      return publicKey;
+    }),
+  };
+}
+
 /**
  * Generate development-only JWKS.
  * This creates keys deterministically for development use only.

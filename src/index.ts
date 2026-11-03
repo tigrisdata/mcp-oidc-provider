@@ -118,7 +118,7 @@ export { createConsoleLogger, noopLogger } from './utils/logger.js';
 export type { Logger, LogLevel } from './utils/logger.js';
 
 // JWKS utilities
-export { generateJwks } from './utils/jwks.js';
+export { generateJwks, toPublicJwks } from './utils/jwks.js';
 export type { GenerateJwksOptions } from './utils/jwks.js';
 
 // Configuration constants

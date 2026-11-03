@@ -5,7 +5,7 @@ import Provider, {
   type Client,
 } from 'oidc-provider';
 import { randomUUID } from 'node:crypto';
-import { jwtVerify, createRemoteJWKSet } from 'jose';
+import { jwtVerify, createLocalJWKSet, type JWTVerifyGetKey, type JSONWebKeySet } from 'jose';
 import { Keyv } from 'keyv';
 
 import type { Request, Response } from 'express';
@@ -20,7 +20,7 @@ import type {
 import { createOidcAdapterFactory } from './oidc-adapter.js';
 import { createExtendedSessionStore, type ExtendedSessionStore } from './session-store.js';
 import { createConsoleLogger, type Logger } from '../utils/logger.js';
-import { generateDevJwks } from '../utils/jwks.js';
+import { generateDevJwks, toPublicJwks } from '../utils/jwks.js';
 import {
   DEFAULT_ACCESS_TOKEN_TTL,
   DEFAULT_AUTHORIZATION_CODE_TTL,
@@ -34,7 +34,6 @@ import {
   DEFAULT_INTERACTION_TTL,
   DEFAULT_GRANT_TTL,
   DEFAULT_SESSION_TTL,
-  DEFAULT_JWKS_CACHE_OPTIONS,
   STORAGE_NAMESPACES,
 } from './config.js';
 
@@ -131,8 +130,9 @@ export function createOidcProvider(config: OidcProviderConfig): OidcProvider {
   // Override redirect_uri validation for MCP client protocols
   overrideRedirectUriValidation(provider, allowedProtocols, logger);
 
-  // Create the JWKS for token verification
-  const JWKS = createRemoteJWKSet(new URL(`${config.issuer}/jwks`), DEFAULT_JWKS_CACHE_OPTIONS);
+  // Verify tokens with the public half of the signing keys already in memory,
+  // so verification never depends on reaching the issuer's /jwks over the network
+  const JWKS: JWTVerifyGetKey = createLocalJWKSet(toPublicJwks(jwks) as JSONWebKeySet);
 
   return {
     provider,
@@ -602,7 +602,7 @@ async function handleCallback(
 async function validateAccessToken(
   token: string,
   config: OidcProviderConfig,
-  JWKS: ReturnType<typeof createRemoteJWKSet>,
+  JWKS: JWTVerifyGetKey,
   sessionStore: ExtendedSessionStore,
   logger: Logger
 ): Promise<TokenValidationResult> {

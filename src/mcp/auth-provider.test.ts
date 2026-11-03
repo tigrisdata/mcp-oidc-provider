@@ -1,3 +1,4 @@
+import { createLocalJWKSet, createRemoteJWKSet } from 'jose';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
@@ -8,6 +9,7 @@ import type { AuthInfo } from './auth-provider.js';
 // Mock jose
 vi.mock('jose', () => ({
   createRemoteJWKSet: vi.fn(() => vi.fn()),
+  createLocalJWKSet: vi.fn(() => vi.fn()),
   jwtVerify: vi.fn(),
 }));
 
@@ -414,6 +416,42 @@ describe('auth-provider', () => {
 
       expect(response.status).toBe(204);
       expect(response.headers['access-control-allow-methods']).toContain('GET');
+    });
+  });
+
+  describe('token verification keys', () => {
+    it('should verify against the provided signing keys without fetching /jwks', () => {
+      vi.mocked(createLocalJWKSet).mockClear();
+      vi.mocked(createRemoteJWKSet).mockClear();
+
+      createMcpAuthProvider({
+        oidcBaseUrl: 'http://localhost:4001',
+        store: mockStore,
+        mcpServerBaseUrl: 'http://localhost:3001',
+        jwks: { keys: [{ kty: 'RSA', kid: 'k1', n: 'n', e: 'AQAB', d: 'secret' }] },
+      });
+
+      expect(createRemoteJWKSet).not.toHaveBeenCalled();
+      expect(createLocalJWKSet).toHaveBeenCalledWith({
+        keys: [{ kty: 'RSA', kid: 'k1', n: 'n', e: 'AQAB' }],
+      });
+    });
+
+    it('should fetch /jwks when no signing keys are provided', () => {
+      vi.mocked(createLocalJWKSet).mockClear();
+      vi.mocked(createRemoteJWKSet).mockClear();
+
+      createMcpAuthProvider({
+        oidcBaseUrl: 'http://localhost:4001',
+        store: mockStore,
+        mcpServerBaseUrl: 'http://localhost:3001',
+      });
+
+      expect(createLocalJWKSet).not.toHaveBeenCalled();
+      expect(createRemoteJWKSet).toHaveBeenCalledWith(
+        new URL('http://localhost:4001/jwks'),
+        expect.any(Object)
+      );
     });
   });
 });
