@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { request } from '../test/helpers/http.js';
+import { listen } from '../test/helpers/server.js';
 import { createOidcServer } from './server.js';
 import type { IOidcClient, KeyvLike } from '../types.js';
 
@@ -93,11 +93,12 @@ describe('server integration tests', () => {
         port: 4001,
       });
 
-      const response = await request(app).get('/health');
+      const baseUrl = await listen(app);
+
+      const response = await fetch(`${baseUrl}/health`);
 
       expect(response.status).toBe(200);
-      expect(response.body.status).toBe('ok');
-      expect(response.body.timestamp).toBeDefined();
+      expect(await response.json()).toMatchObject({ status: 'ok', timestamp: expect.any(String) });
     });
   });
 
@@ -111,10 +112,12 @@ describe('server integration tests', () => {
         port: 4001,
       });
 
-      const response = await request(app).get('/unknown-route');
+      const baseUrl = await listen(app);
+
+      const response = await fetch(`${baseUrl}/unknown-route`);
 
       expect(response.status).toBe(404);
-      expect(response.body.error).toBe('Not Found');
+      expect(await response.json()).toEqual({ error: 'Not Found' });
     });
   });
 
@@ -168,10 +171,12 @@ describe('server integration tests', () => {
       });
 
       // Request to an OIDC route should not error due to body parsing
-      const response = await request(app)
-        .post('/token')
-        .set('Content-Type', 'application/x-www-form-urlencoded')
-        .send('grant_type=authorization_code');
+      const baseUrl = await listen(app);
+      const response = await fetch(`${baseUrl}/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'grant_type=authorization_code',
+      });
 
       // The request goes through (may return error from OIDC provider, but no body parsing error)
       expect(response.status).toBeDefined();
@@ -188,11 +193,15 @@ describe('server integration tests', () => {
         port: 4001,
       });
 
-      const response = await request(app).get('/.well-known/oauth-protected-resource');
+      const baseUrl = await listen(app);
+
+      const response = await fetch(`${baseUrl}/.well-known/oauth-protected-resource`);
 
       expect(response.status).toBe(200);
-      expect(response.body.resource).toBeDefined();
-      expect(response.body.authorization_servers).toBeDefined();
+      expect(await response.json()).toMatchObject({
+        resource: expect.any(String),
+        authorization_servers: expect.any(Array),
+      });
     });
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { request } from '../test/helpers/http.js';
+import { listen } from '../test/helpers/server.js';
 import { setupMcpExpress } from './setup.js';
 import type { IOidcClient, KeyvLike } from '../types.js';
 import { TEST_BASE_URL, TEST_SECRET, TEST_USER_ID, TEST_EMAIL } from '../test/constants.js';
@@ -52,11 +52,12 @@ describe('setup integration tests', () => {
         secret: TEST_SECRET,
       });
 
-      const response = await request(app).get('/health');
+      const baseUrl = await listen(app);
+
+      const response = await fetch(`${baseUrl}/health`);
 
       expect(response.status).toBe(200);
-      expect(response.body.status).toBe('ok');
-      expect(response.body.timestamp).toBeDefined();
+      expect(await response.json()).toMatchObject({ status: 'ok', timestamp: expect.any(String) });
     });
   });
 
@@ -69,10 +70,12 @@ describe('setup integration tests', () => {
         secret: TEST_SECRET,
       });
 
-      const response = await request(app).get('/unknown-route');
+      const baseUrl = await listen(app);
+
+      const response = await fetch(`${baseUrl}/unknown-route`);
 
       expect(response.status).toBe(404);
-      expect(response.body.error).toBe('Not Found');
+      expect(await response.json()).toEqual({ error: 'Not Found' });
     });
   });
 
@@ -85,7 +88,12 @@ describe('setup integration tests', () => {
         secret: TEST_SECRET,
       });
 
-      const response = await request(app).post('/mcp').send({ test: 'data' });
+      const baseUrl = await listen(app);
+      const response = await fetch(`${baseUrl}/mcp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test: 'data' }),
+      });
 
       expect(response.status).toBe(401);
     });
@@ -98,10 +106,12 @@ describe('setup integration tests', () => {
         secret: TEST_SECRET,
       });
 
-      const response = await request(app).get('/mcp');
+      const baseUrl = await listen(app);
+
+      const response = await fetch(`${baseUrl}/mcp`);
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('MCP handler not configured');
+      expect(await response.json()).toEqual({ error: 'MCP handler not configured' });
     });
 
     it('should return 500 if MCP handler not configured for DELETE', async () => {
@@ -112,10 +122,12 @@ describe('setup integration tests', () => {
         secret: TEST_SECRET,
       });
 
-      const response = await request(app).delete('/mcp');
+      const baseUrl = await listen(app);
+
+      const response = await fetch(`${baseUrl}/mcp`, { method: 'DELETE' });
 
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('MCP handler not configured');
+      expect(await response.json()).toEqual({ error: 'MCP handler not configured' });
     });
 
     it('should call MCP handler for GET when configured', async () => {
@@ -130,10 +142,12 @@ describe('setup integration tests', () => {
         res.json({ handled: true });
       });
 
-      const response = await request(app).get('/mcp');
+      const baseUrl = await listen(app);
+
+      const response = await fetch(`${baseUrl}/mcp`);
 
       expect(response.status).toBe(200);
-      expect(response.body.handled).toBe(true);
+      expect(await response.json()).toMatchObject({ handled: true });
     });
 
     it('should call MCP handler for DELETE when configured', async () => {
@@ -148,10 +162,12 @@ describe('setup integration tests', () => {
         res.json({ deleted: true });
       });
 
-      const response = await request(app).delete('/mcp');
+      const baseUrl = await listen(app);
+
+      const response = await fetch(`${baseUrl}/mcp`, { method: 'DELETE' });
 
       expect(response.status).toBe(200);
-      expect(response.body.deleted).toBe(true);
+      expect(await response.json()).toMatchObject({ deleted: true });
     });
   });
 
@@ -165,10 +181,12 @@ describe('setup integration tests', () => {
       });
 
       // Request to an OIDC route should not error due to body parsing
-      const response = await request(app)
-        .post('/token')
-        .set('Content-Type', 'application/x-www-form-urlencoded')
-        .send('grant_type=authorization_code');
+      const baseUrl = await listen(app);
+      const response = await fetch(`${baseUrl}/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'grant_type=authorization_code',
+      });
 
       // The request goes through (may return error from OIDC provider, but no body parsing error)
       expect(response.status).toBeDefined();
@@ -184,11 +202,15 @@ describe('setup integration tests', () => {
         secret: TEST_SECRET,
       });
 
-      const response = await request(app).get('/.well-known/oauth-protected-resource');
+      const baseUrl = await listen(app);
+
+      const response = await fetch(`${baseUrl}/.well-known/oauth-protected-resource`);
 
       expect(response.status).toBe(200);
-      expect(response.body.resource).toBeDefined();
-      expect(response.body.authorization_servers).toBeDefined();
+      expect(await response.json()).toMatchObject({
+        resource: expect.any(String),
+        authorization_servers: expect.any(Array),
+      });
     });
   });
 
@@ -212,14 +234,16 @@ describe('setup integration tests', () => {
         },
       });
 
-      const response = await request(app)
-        .post('/mcp')
-        .set('Authorization', 'Bearer valid-token')
-        .send({ test: 'data' });
+      const baseUrl = await listen(app);
+      const response = await fetch(`${baseUrl}/mcp`, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer valid-token', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test: 'data' }),
+      });
 
       // With valid auth but no handler, should return 500
       expect(response.status).toBe(500);
-      expect(response.body.error).toBe('MCP handler not configured');
+      expect(await response.json()).toEqual({ error: 'MCP handler not configured' });
     });
 
     it('should call MCP handler for authenticated POST when configured', async () => {
@@ -251,15 +275,19 @@ describe('setup integration tests', () => {
         });
       });
 
-      const response = await request(app)
-        .post('/mcp')
-        .set('Authorization', 'Bearer valid-token')
-        .send({ test: 'data' });
+      const baseUrl = await listen(app);
+      const response = await fetch(`${baseUrl}/mcp`, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer valid-token', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test: 'data' }),
+      });
 
       expect(response.status).toBe(200);
-      expect(response.body.handled).toBe(true);
-      expect(response.body.hasUser).toBe(true);
-      expect(response.body.userId).toBe(TEST_USER_ID);
+      expect(await response.json()).toMatchObject({
+        handled: true,
+        hasUser: true,
+        userId: TEST_USER_ID,
+      });
     });
   });
 });
