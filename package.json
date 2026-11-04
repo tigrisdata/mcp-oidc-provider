@@ -1,6 +1,6 @@
 {
   "name": "mcp-oidc-provider",
-  "version": "1.0.0-beta.1",
+  "version": "2.1.2",
   "description": "OIDC provider for MCP servers with pluggable identity providers",
   "type": "module",
   "main": "./dist/index.js",
@@ -27,6 +27,9 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -40,7 +43,9 @@
     "test:coverage": "vitest run --coverage",
     "prepare": "husky",
     "prepublishOnly": "npm run build",
-    "semantic-release": "semantic-release"
+    "changeset": "changeset",
+    "version": "changeset version && npm install --package-lock-only --ignore-scripts",
+    "release": "changeset publish"
   },
   "keywords": [
     "mcp",
@@ -69,24 +74,8 @@
   },
   "dependencies": {
     "jose": "^6.2.3",
-    "oidc-provider": "^9.8.3"
-  },
-  "release": {
-    "branches": [
-      "main"
-    ],
-    "plugins": [
-      "@semantic-release/commit-analyzer",
-      "@semantic-release/release-notes-generator",
-      "@semantic-release/changelog",
-      "@semantic-release/npm",
-      "@semantic-release/github"
-    ]
-  },
-  "commitlint": {
-    "extends": [
-      "@commitlint/config-conventional"
-    ]
+    "oidc-provider": "^9.8.3",
+    "openid-client": "^6.8.4"
   },
   "peerDependencies": {
     "express": "^4.0.0 || ^5.0.0",
@@ -104,23 +93,14 @@
       "optional": false
     }
   },
-  "optionalDependencies": {
-    "openid-client": "^6.8.4"
-  },
   "devDependencies": {
-    "@commitlint/cli": "^21.0.0",
-    "@commitlint/config-conventional": "^21.0.0",
+    "@changesets/changelog-github": "^1.0.1",
+    "@changesets/cli": "^3.0.3",
     "@eslint/js": "^10.0.1",
-    "@semantic-release/changelog": "^7.0.0",
-    "@semantic-release/commit-analyzer": "^13.0.1",
-    "@semantic-release/github": "^12.0.6",
-    "@semantic-release/npm": "^13.1.5",
-    "@semantic-release/release-notes-generator": "^14.1.0",
     "@types/express": "^5.0.6",
     "@types/express-session": "^1.19.0",
     "@types/node": "^25.6.0",
     "@types/oidc-provider": "^9.5.0",
-    "@types/supertest": "^7.2.0",
     "@vitest/coverage-v8": "^5.0.0",
     "eslint": "^10.2.1",
     "express": "^5.2.1",
@@ -128,8 +108,6 @@
     "husky": "^9.1.7",
     "keyv": "^5.6.0",
     "prettier": "^3.8.3",
-    "semantic-release": "^25.0.3",
-    "supertest": "^7.2.2",
     "tsup": "^8.5.1",
     "typescript": "^5.9.0",
     "typescript-eslint": "^8.59.1",

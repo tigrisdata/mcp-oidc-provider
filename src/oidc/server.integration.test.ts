@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import request from 'supertest';
+import { request } from '../test/helpers/http.js';
 import { createOidcServer } from './server.js';
 import type { IOidcClient, KeyvLike } from '../types.js';
 

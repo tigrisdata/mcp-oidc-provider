@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import request from 'supertest';
+import { request } from '../test/helpers/http.js';
 import express from 'express';
 import { createMcpAuthProvider, getIdpTokens, InvalidTokenError } from './auth-provider.js';
 import type { KeyvLike, AuthenticatedUser } from '../types.js';

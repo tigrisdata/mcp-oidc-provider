@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import request from 'supertest';
+import { request } from '../test/helpers/http.js';
 import { setupMcpExpress } from './setup.js';
 import type { IOidcClient, KeyvLike } from '../types.js';
 import { TEST_BASE_URL, TEST_SECRET, TEST_USER_ID, TEST_EMAIL } from '../test/constants.js';
