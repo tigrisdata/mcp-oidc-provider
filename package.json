@@ -1,6 +1,6 @@
 {
   "name": "mcp-oidc-provider",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "description": "OIDC provider for MCP servers with pluggable identity providers",
   "type": "module",
   "main": "./dist/index.js",
