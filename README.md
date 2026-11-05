@@ -29,7 +29,7 @@ It uses different packages under the hood to glue everything together:
 ## Installation
 
 ```bash
-npm install mcp-oidc-provider keyv openid-client
+npm install mcp-oidc-provider keyv
 ```
 
 ## JWKS (Signing Keys)

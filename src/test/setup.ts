@@ -6,6 +6,7 @@
  */
 
 import { vi, beforeAll, afterAll, afterEach } from 'vitest';
+import { closeServers } from './helpers/server.js';
 
 /**
  * Suppress console output during tests to reduce noise.
@@ -41,9 +42,11 @@ afterAll(() => {
   console.debug = originalConsole.debug;
 });
 
-afterEach(() => {
+afterEach(async () => {
   // Clear all mocks after each test for isolation
   vi.clearAllMocks();
+  // Close any Express servers started with listen()
+  await closeServers();
 });
 
 /**

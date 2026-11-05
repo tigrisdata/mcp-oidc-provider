@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import request from 'supertest';
+import { listen } from '../test/helpers/server.js';
 import express from 'express';
 import { createMcpAuthProvider, getIdpTokens, InvalidTokenError } from './auth-provider.js';
 import type { KeyvLike, AuthenticatedUser } from '../types.js';
@@ -333,11 +333,12 @@ describe('auth-provider', () => {
       const app = express();
       app.use(result.mcpRoutes);
 
-      const response = await request(app).get('/health');
+      const baseUrl = await listen(app);
+
+      const response = await fetch(`${baseUrl}/health`);
 
       expect(response.status).toBe(200);
-      expect(response.body.status).toBe('ok');
-      expect(response.body.timestamp).toBeDefined();
+      expect(await response.json()).toMatchObject({ status: 'ok', timestamp: expect.any(String) });
     });
 
     it('should return protected resource metadata from /.well-known/oauth-protected-resource', async () => {
@@ -350,18 +351,17 @@ describe('auth-provider', () => {
       const app = express();
       app.use(result.mcpRoutes);
 
-      const response = await request(app).get('/.well-known/oauth-protected-resource');
+      const baseUrl = await listen(app);
+
+      const response = await fetch(`${baseUrl}/.well-known/oauth-protected-resource`);
 
       expect(response.status).toBe(200);
-      expect(response.body.resource).toBe('http://localhost:3001/mcp');
-      expect(response.body.authorization_servers).toEqual(['http://localhost:4001']);
-      expect(response.body.scopes_supported).toEqual([
-        'openid',
-        'email',
-        'profile',
-        'offline_access',
-      ]);
-      expect(response.body.bearer_methods_supported).toEqual(['header']);
+      expect(await response.json()).toEqual({
+        resource: 'http://localhost:3001/mcp',
+        authorization_servers: ['http://localhost:4001'],
+        scopes_supported: ['openid', 'email', 'profile', 'offline_access'],
+        bearer_methods_supported: ['header'],
+      });
     });
 
     it('should use custom MCP endpoint path in protected resource metadata', async () => {
@@ -376,11 +376,15 @@ describe('auth-provider', () => {
       const app = express();
       app.use(result.mcpRoutes);
 
-      const response = await request(app).get('/.well-known/oauth-protected-resource');
+      const baseUrl = await listen(app);
+
+      const response = await fetch(`${baseUrl}/.well-known/oauth-protected-resource`);
 
       expect(response.status).toBe(200);
-      expect(response.body.resource).toBe('http://localhost:3001/custom-mcp');
-      expect(response.body.scopes_supported).toEqual(['openid', 'custom']);
+      expect(await response.json()).toMatchObject({
+        resource: 'http://localhost:3001/custom-mcp',
+        scopes_supported: ['openid', 'custom'],
+      });
     });
 
     it('should set CORS headers for allowed origins', async () => {
@@ -394,10 +398,13 @@ describe('auth-provider', () => {
       app.use(result.mcpRoutes);
 
       // MCP Inspector origin should be allowed by default
-      const response = await request(app).get('/health').set('Origin', 'http://localhost:6274');
+      const baseUrl = await listen(app);
+      const response = await fetch(`${baseUrl}/health`, {
+        headers: { Origin: 'http://localhost:6274' },
+      });
 
-      expect(response.headers['access-control-allow-origin']).toBe('http://localhost:6274');
-      expect(response.headers['access-control-allow-credentials']).toBe('true');
+      expect(response.headers.get('access-control-allow-origin')).toBe('http://localhost:6274');
+      expect(response.headers.get('access-control-allow-credentials')).toBe('true');
     });
 
     it('should respond to OPTIONS preflight requests', async () => {
@@ -410,10 +417,14 @@ describe('auth-provider', () => {
       const app = express();
       app.use(result.mcpRoutes);
 
-      const response = await request(app).options('/health').set('Origin', 'http://localhost:6274');
+      const baseUrl = await listen(app);
+      const response = await fetch(`${baseUrl}/health`, {
+        method: 'OPTIONS',
+        headers: { Origin: 'http://localhost:6274' },
+      });
 
       expect(response.status).toBe(204);
-      expect(response.headers['access-control-allow-methods']).toContain('GET');
+      expect(response.headers.get('access-control-allow-methods')).toContain('GET');
     });
   });
 });

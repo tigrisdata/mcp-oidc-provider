@@ -47,24 +47,20 @@ npm run test:coverage  # Run tests with coverage
 - Coverage is tracked via Codecov
 - Run `npm run test:coverage` before submitting PRs
 
-## Commit Messages
+## Commit Messages and Releases
 
-Must follow [Conventional Commits](https://www.conventionalcommits.org/) format:
+Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) style by convention (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`). This is not enforced by tooling.
 
-- `feat:` - New features
-- `fix:` - Bug fixes
-- `docs:` - Documentation changes
-- `refactor:` - Code refactoring
-- `test:` - Adding or updating tests
-- `chore:` - Maintenance tasks
+Releases are driven by [changesets](https://github.com/changesets/changesets), not by commit messages:
 
-Example: `feat: add support for custom OIDC client implementations`
+- Every PR that changes published behaviour must add a changeset: `npx changeset`, pick the bump type (`patch`, `minor`, `major`) and describe the change for the changelog.
+- On merge to `main`, the release workflow opens or updates a "Version Packages" PR that applies pending changesets to `package.json` and `CHANGELOG.md`.
+- Merging the "Version Packages" PR publishes to npm via trusted publishing (no npm token).
 
 ## Important Notes
 
 - JWKS keys are auto-generated in development but must be persisted for production
-- The package uses semantic-release for automated versioning
-- Commitlint enforces conventional commit format
+- Versioning and publishing are handled by changesets (see above)
 - Husky runs pre-commit hooks for linting and formatting
 
 ## Related Links
