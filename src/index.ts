@@ -1,127 +1,78 @@
 /**
  * mcp-oidc-provider
  *
- * OIDC provider for MCP servers with pluggable identity providers.
- * Works with any OIDC-compliant identity provider (Auth0, Clerk, Okta, Keycloak, Azure AD, Google, etc.)
+ * An OAuth 2.1 authorization server for MCP clients that relays to the
+ * identity provider you already have (Auth0, Okta, Keycloak, Entra ID,
+ * Google, ...). MCP clients register with the relay (Dynamic Client
+ * Registration or Client ID Metadata Documents), the user approves the
+ * client on the relay's consent page, and the relay forwards the
+ * authorization code and refresh token grants to the provider using its
+ * single confidential client. Tokens are minted by the provider only; the
+ * relay stores no tokens and holds no signing key.
  *
- * ## Package Exports
- *
- * - `mcp-oidc-provider` - Core types, createOidcProvider, utilities
- * - `mcp-oidc-provider/oidc` - OidcClient, createOidcServer (the OIDC server)
- * - `mcp-oidc-provider/mcp` - createMcpAuthProvider, getIdpTokens (the MCP resource server side, MCP SDK v2)
- *
- * @example OIDC server
- * ```typescript
- * import { Keyv } from 'keyv';
- * import { createOidcServer, OidcClient } from 'mcp-oidc-provider/oidc';
- *
- * const store = new Keyv();
- *
- * // Create OIDC server with any OIDC provider
- * const oidcServer = createOidcServer({
- *   idpClient: new OidcClient({
- *     issuer: 'https://your-tenant.auth0.com', // or any OIDC issuer
- *     clientId: process.env.OIDC_CLIENT_ID!,
- *     clientSecret: process.env.OIDC_CLIENT_SECRET!,
- *     redirectUri: 'http://localhost:4001/oauth/callback',
- *   }),
- *   store,
- *   secret: process.env.SESSION_SECRET!,
- *   port: 4001,
- *   baseUrl: 'http://localhost:4001',
- * });
- *
- * await oidcServer.start();
- * ```
- *
- * @example MCP server (MCP SDK v2)
+ * @example
  * ```typescript
  * import { createMcpExpressApp, requireBearerAuth } from '@modelcontextprotocol/express';
- * import { createMcpAuthProvider } from 'mcp-oidc-provider/mcp';
+ * import { Keyv } from 'keyv';
+ * import { createAuthRelay } from 'mcp-oidc-provider';
  *
- * // Token verifier and OAuth metadata routes; `store` is the OIDC server's Keyv store.
- * // Fetches the OIDC server's metadata once, so start the OIDC server first.
- * const { verifier, mcpRoutes, resourceMetadataUrl } = await createMcpAuthProvider({
- *   oidcBaseUrl: 'http://localhost:4001',
- *   store,
- *   mcpServerBaseUrl: 'http://localhost:3001',
+ * const relay = createAuthRelay({
+ *   baseUrl: 'https://mcp.example.com',
+ *   upstream: {
+ *     issuer: 'https://your-tenant.auth0.com',
+ *     clientId: process.env.OIDC_CLIENT_ID!,
+ *     clientSecret: process.env.OIDC_CLIENT_SECRET!,
+ *     audience: 'https://api.example.com',
+ *   },
+ *   store: new Keyv(),
  * });
  *
- * const app = createMcpExpressApp({ host: '0.0.0.0', allowedHosts: ['localhost'] });
- * app.use(mcpRoutes);
- * app.post('/mcp', requireBearerAuth({ verifier, resourceMetadataUrl }), mcpHandler);
- * app.listen(3001);
+ * const app = createMcpExpressApp({ host: '0.0.0.0', allowedHosts: ['mcp.example.com'] });
+ * app.use(relay.router);
+ * app.post(
+ *   '/mcp',
+ *   requireBearerAuth({
+ *     verifier: relay.verifier,
+ *     resourceMetadataUrl: relay.resourceMetadataUrl,
+ *     expectedResource: relay.resource,
+ *   }),
+ *   mcpHandler
+ * );
+ * app.listen(3000);
  * ```
  *
  * @packageDocumentation
  */
 
-// Core provider
-export { createOidcProvider } from './core/provider.js';
+export {
+  createAuthRelay,
+  DEFAULT_CALLBACK_PATH,
+  DEFAULT_CONSENT_COOKIE_NAME,
+  DEFAULT_CONSENT_TTL,
+  DEFAULT_MCP_ENDPOINT_PATH,
+  type AuthRelay,
+} from './relay/create-auth-relay.js';
 
-// OIDC client for any OIDC-compliant identity provider
-export { OidcClient } from './oidc/client.js';
-export type { OidcClientConfig, ExtractCustomDataFn } from './oidc/client.js';
-
-// Session store utilities
-export { createSessionStore, createExtendedSessionStore } from './core/session-store.js';
-export type { ExtendedSessionStore } from './core/session-store.js';
-
-// OIDC adapter
-export { createOidcAdapterFactory } from './core/oidc-adapter.js';
-export type { OidcAdapterFactory } from './core/oidc-adapter.js';
-
-// All types - from foundation types.ts
 export type {
-  // JWKS types
-  JWK,
-  JWKS,
-  // Storage types
-  KeyValueStore,
+  AuthRelayOptions,
+  ClientOptions,
+  ConsentOptions,
+  CustomDataContext,
+  CustomDataFn,
+  JwksCacheOptions,
   KeyvLike,
-  // IdP client types
-  IOidcClient,
-  AuthorizationParams,
-  TokenSet,
-  UserClaims,
-  // Session types
-  UserSession,
-  SessionStore,
-  InteractionSession,
-  // Auth result types
-  AuthenticatedUser,
-  TokenValidationResult,
-  // Configuration types
-  BaseOidcOptions,
+  TokenResponseEvent,
+  TokenResponseHook,
+  UpstreamMetadata,
+  UpstreamOptions,
 } from './types.js';
 
-// Internal types (for advanced users)
-export type { OidcProviderConfig, OidcProvider } from './core/types.js';
+export type { ConsentView } from './relay/html.js';
+export { escapeHtml } from './relay/html.js';
+export type { OAuthMetadata } from './relay/metadata.js';
+export { DEFAULT_UPSTREAM_SCOPES, DEFAULT_JWKS_CACHE_OPTIONS } from './relay/upstream.js';
+export { DEFAULT_REGISTRATION_TTL, DEFAULT_CIMD_CACHE_TTL } from './relay/clients.js';
+export { STORAGE_NAMESPACES } from './relay/storage.js';
 
-// Logger utilities
 export { createConsoleLogger, noopLogger } from './utils/logger.js';
 export type { Logger, LogLevel } from './utils/logger.js';
-
-// JWKS utilities
-export { generateJwks } from './utils/jwks.js';
-export type { GenerateJwksOptions } from './utils/jwks.js';
-
-// Configuration constants
-export {
-  DEFAULT_ACCESS_TOKEN_TTL,
-  DEFAULT_AUTHORIZATION_CODE_TTL,
-  DEFAULT_ID_TOKEN_TTL,
-  DEFAULT_REFRESH_TOKEN_TTL,
-  DEFAULT_INTERACTION_SESSION_TTL_MS,
-  DEFAULT_USER_SESSION_TTL_MS,
-  DEFAULT_INTERACTION_TTL,
-  DEFAULT_GRANT_TTL,
-  DEFAULT_SESSION_TTL,
-  DEFAULT_SCOPES,
-  DEFAULT_CLAIMS,
-  DEFAULT_ROUTES,
-  DEFAULT_ALLOWED_CLIENT_PROTOCOLS,
-  DEFAULT_JWKS_CACHE_OPTIONS,
-  STORAGE_NAMESPACES,
-} from './core/config.js';
-export type { JwksCacheOptions } from './core/config.js';

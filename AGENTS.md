@@ -2,21 +2,28 @@ Project Instructions for mcp-oidc-provider
 
 ## Overview
 
-This is `mcp-oidc-provider` - an Express middleware that acts as an OIDC provider for MCP (Model Context Protocol) servers with support for any OIDC-compliant identity provider as its backend.
+`mcp-oidc-provider` is an OAuth 2.1 authorization server for MCP (Model Context Protocol) servers that relays to an upstream OpenID Connect identity provider (Auth0, Okta, Keycloak, Entra ID, ...). It gives MCP clients what the MCP authorization spec requires (protected resource metadata, authorization server metadata, Dynamic Client Registration, Client ID Metadata Documents, PKCE, a consent page) while every token is minted by the identity provider. The relay stores no tokens and holds no signing key.
 
 ## Key Concepts
 
-- **OIDC Provider**: Acts as a man-in-the-middle between MCP clients and upstream identity providers
-- **Deployment**: The OIDC server is its own Express app (`createOidcServer`). The MCP server is an OAuth resource server built with the MCP TypeScript SDK v2: `requireBearerAuth` from `@modelcontextprotocol/express` with the verifier and metadata routes from `createMcpAuthProvider`
-- **Storage**: Uses Keyv for abstraction - supports any Keyv-compatible backend (Tigris, Redis, in-memory)
+- **Relay, not provider**: `/authorize` validates the MCP client and redirects to the identity provider with the client's PKCE challenge; the callback hands a relay code to the client; `/token` exchanges it at the identity provider with the relay's single confidential client and returns the provider's response as is.
+- **One Express router**: `createAuthRelay` returns `router` (mount at the root of the MCP app), `verifier` (for the MCP SDK's `requireBearerAuth`), `resource` and `resourceMetadataUrl`.
+- **Verification**: the MCP endpoint verifies the provider's JWT access tokens against its JWKS: issuer, `upstream.audience`, expiry. `customData` derives application data from claims or a cached UserInfo lookup.
+- **Storage**: Keyv (any adapter) holds client registrations, cached client metadata documents and in-flight authorization requests only.
+- **Consent**: the relay asks the user to approve each client and redirect URI (confused-deputy mitigation from the MCP spec). Decisions live in a signed cookie.
 
 ## Project Structure
 
-- `src/oidc/` - Core OIDC server implementation (`createOidcServer`, `OidcClient`)
-- `src/mcp/` - MCP resource server side (`createMcpAuthProvider`, `getIdpTokens`)
-- `src/core/` - Core provider implementation
-- `src/utils/` - Utilities (JWKS generation, etc.)
-- `example/` - Example implementations
+- `src/relay/create-auth-relay.ts` - composes the router, verifier and metadata
+- `src/relay/authorize.ts` - `/authorize`, consent decision, identity provider callback
+- `src/relay/token.ts` - `/token`
+- `src/relay/clients.ts` - Dynamic Client Registration, Client ID Metadata Documents, redirect URI policy, client authentication
+- `src/relay/upstream.ts` - identity provider discovery, token endpoint, UserInfo, JWKS
+- `src/relay/verifier.ts` - `OAuthTokenVerifier` for the MCP SDK
+- `src/relay/consent.ts`, `src/relay/html.ts` - consent cookie and pages
+- `src/express/cors.ts` - CORS for the MCP endpoint
+- `src/test/helpers/upstream.ts` - fake identity provider used by the tests
+- `example/relay/` - runnable example
 
 ## Development Commands
 
@@ -41,9 +48,8 @@ npm run test:coverage  # Run tests with coverage
 
 ## Testing
 
-- Tests are written with Vitest
-- Coverage is tracked via Codecov
-- Run `npm run test:coverage` before submitting PRs
+- Tests are written with Vitest; HTTP behaviour is tested against real listeners (`listen()` helper + `fetch`) and a fake identity provider (`startFakeUpstream()`)
+- Coverage thresholds are enforced (see `vitest.config.ts`); run `npm run test:coverage` before submitting PRs
 
 ## Commit Messages and Releases
 
@@ -57,7 +63,9 @@ Releases are driven by [changesets](https://github.com/changesets/changesets), n
 
 ## Important Notes
 
-- JWKS keys are auto-generated in development but must be persisted for production
+- The relay must be reachable at `baseUrl` over HTTPS in production; the MCP SDK rejects a non-HTTPS issuer other than `localhost` unless `MCP_DANGEROUSLY_ALLOW_INSECURE_ISSUER_URL=true` is set
+- The identity provider must issue JWT access tokens for `upstream.audience`
+- Keep the package generic: nothing in code or docs may assume one particular deployment or identity provider
 - Versioning and publishing are handled by changesets (see above)
 - Husky runs pre-commit hooks for linting and formatting
 
