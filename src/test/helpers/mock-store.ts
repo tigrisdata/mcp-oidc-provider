@@ -36,34 +36,3 @@ export function createMockStore(): {
 
   return { store, storedData };
 }
-
-/**
- * Stores a user session in the mock store with Keyv's serialization format.
- */
-export function storeUserSession(
-  storedData: Map<string, unknown>,
-  sessionId: string,
-  session: {
-    userId: string;
-    claims: Record<string, unknown>;
-    tokenSet: Record<string, unknown>;
-  }
-): void {
-  storedData.set(`user-sessions:${sessionId}`, JSON.stringify({ value: session }));
-}
-
-/**
- * Stores an auth state in the mock store with Keyv's serialization format.
- */
-export function storeAuthState(
-  storedData: Map<string, unknown>,
-  state: string,
-  authState: {
-    state: string;
-    nonce: string;
-    codeVerifier: string;
-    redirectUri?: string;
-  }
-): void {
-  storedData.set(`auth-state:${state}`, JSON.stringify({ value: authState }));
-}

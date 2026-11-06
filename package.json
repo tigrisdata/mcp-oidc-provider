@@ -1,7 +1,7 @@
 {
   "name": "mcp-oidc-provider",
   "version": "2.1.2",
-  "description": "OIDC provider for MCP servers with pluggable identity providers",
+  "description": "OAuth relay for MCP servers: client registration, consent and token relay in front of any OIDC identity provider",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -9,18 +9,7 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
-    },
-    "./oidc": {
-      "import": "./dist/oidc/index.js",
-      "types": "./dist/oidc/index.d.ts"
-    },
-    "./mcp": {
-      "import": "./dist/mcp/index.js",
-      "types": "./dist/mcp/index.d.ts"
     }
-  },
-  "bin": {
-    "mcp-oidc-provider": "./dist/bin/generate-jwks.js"
   },
   "files": [
     "dist",
@@ -49,13 +38,12 @@
   },
   "keywords": [
     "mcp",
-    "oidc",
     "oauth",
     "oauth2",
-    "openid",
+    "oidc",
     "openid-connect",
-    "authentication",
     "authorization",
+    "token-relay",
     "model-context-protocol",
     "express"
   ],
@@ -73,22 +61,16 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "jose": "^6.2.3",
-    "oidc-provider": "^9.8.3",
-    "openid-client": "^6.8.4"
+    "jose": "^6.2.3"
   },
   "peerDependencies": {
     "@modelcontextprotocol/express": ">=2.0.0",
     "@modelcontextprotocol/server": ">=2.0.0",
     "express": "^4.0.0 || ^5.0.0",
-    "express-session": "^1.18.0",
     "keyv": "^5.0.0"
   },
   "peerDependenciesMeta": {
     "express": {
-      "optional": true
-    },
-    "express-session": {
       "optional": true
     },
     "keyv": {
@@ -102,13 +84,10 @@
     "@modelcontextprotocol/express": "^2.0.2",
     "@modelcontextprotocol/server": "^2.4.0",
     "@types/express": "^5.0.6",
-    "@types/express-session": "^1.19.0",
     "@types/node": "^25.6.0",
-    "@types/oidc-provider": "^9.5.0",
     "@vitest/coverage-v8": "^5.0.0",
     "eslint": "^10.2.1",
     "express": "^5.2.1",
-    "express-session": "^1.19.0",
     "husky": "^9.1.7",
     "keyv": "^5.6.0",
     "prettier": "^3.8.3",

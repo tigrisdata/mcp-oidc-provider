@@ -1,0 +1,28 @@
+{
+  "name": "mcp-oidc-provider-example-relay",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "An MCP server protected by mcp-oidc-provider's auth relay",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/express": "^2.0.2",
+    "@modelcontextprotocol/node": "^2.1.2",
+    "@modelcontextprotocol/server": "^2.4.0",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "keyv": "^5.6.0",
+    "mcp-oidc-provider": "file:../..",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.6.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.0"
+  }
+}
