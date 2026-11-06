@@ -1,6 +1,6 @@
 # Standalone OIDC Server Example
 
-This example runs the OIDC provider as a standalone server, separate from your MCP server. Use this when you want to share the OIDC server across multiple MCP servers or when your MCP implementation is in a different stack (e.g., Next.js).
+This example runs the OIDC provider as its own server next to an MCP server built with the MCP SDK v2. The two can run as separate processes, be scaled independently, and one OIDC server can serve several MCP servers.
 
 ## Architecture
 
@@ -10,7 +10,8 @@ This example runs the OIDC provider as a standalone server, separate from your M
 │ (Cursor/Claude) │     │   (port 3001)   │
 └─────────────────┘     └────────┬────────┘
                                  │
-                                 │ Proxy OAuth
+                                 │ Verifies tokens,
+                                 │ advertises AS metadata
                                  ▼
                         ┌──────────────────┐
                         │   OIDC Server    │
@@ -122,10 +123,10 @@ Set the output as the `JWKS` environment variable. This ensures:
 
 | Endpoint                                      | Description                  |
 | --------------------------------------------- | ---------------------------- |
-| `POST /mcp`                                   | MCP endpoint (requires auth) |
-| `GET /.well-known/oauth-authorization-server` | OAuth metadata               |
-| `GET /.well-known/oauth-protected-resource`   | Protected resource metadata  |
-| `GET /health`                                 | Health check                 |
+| `POST /mcp`                                     | MCP endpoint (requires auth)                                     |
+| `GET /.well-known/oauth-protected-resource/mcp` | Protected resource metadata (RFC 9728)                           |
+| `GET /.well-known/oauth-authorization-server`   | OIDC server's authorization server metadata (fetched at startup) |
+| `GET /health`                                   | Health check                                                     |
 
 ## Key Components
 
@@ -133,10 +134,9 @@ This example uses:
 
 - **`createOidcServer`** from `mcp-oidc-provider/oidc` - Standalone OIDC server
 - **`OidcClient`** from `mcp-oidc-provider/oidc` - Universal OIDC client (works with any provider)
-- **`createMcpAuthProvider`** from `mcp-oidc-provider/mcp` - MCP SDK integration helper
-- **`ProxyOAuthServerProvider`** from MCP SDK - Proxies OAuth requests to OIDC server
-- **`mcpAuthRouter`** from MCP SDK - OAuth routes for MCP server
-- **`requireBearerAuth`** from MCP SDK - Bearer token middleware
+- **`createMcpAuthProvider`** from `mcp-oidc-provider/mcp` - Token verifier and metadata routes for the MCP server
+- **`createMcpExpressApp`** and **`requireBearerAuth`** from `@modelcontextprotocol/express` - Express app with DNS rebinding protection, and bearer token middleware (MCP SDK v2)
+- **`McpServer`** from `@modelcontextprotocol/server` and **`NodeStreamableHTTPServerTransport`** from `@modelcontextprotocol/node` - MCP SDK v2
 
 ## Testing
 

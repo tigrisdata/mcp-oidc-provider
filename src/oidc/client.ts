@@ -74,7 +74,7 @@ export interface OidcClientConfig {
 
   /**
    * Custom function to extract provider-specific data from ID token claims.
-   * The extracted data will be available in `req.user.customData`.
+   * The extracted data will be available in `req.auth.extra.customData`.
    *
    * @example
    * ```typescript

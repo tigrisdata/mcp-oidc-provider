@@ -112,7 +112,7 @@ const PROVIDER_ROUTES = [
  * @param path - The request path to check
  * @returns true if the path is handled by oidc-provider
  *
- * @internal This is an internal utility used by setupMcpExpress and createOidcServer.
+ * @internal This is an internal utility used by createOidcServer.
  *
  * @example
  * ```typescript
@@ -145,7 +145,7 @@ export function isOidcProviderRoute(path: string): boolean {
  * @param options - Adapter options
  * @returns Express adapter result
  *
- * @internal This is an internal utility used by setupMcpExpress and createOidcServer.
+ * @internal This is an internal utility used by createOidcServer.
  *
  * @example
  * ```typescript
@@ -293,7 +293,7 @@ export function createExpressAdapter(
  * @param options - Adapter options
  * @returns Express router with all routes
  *
- * @internal This is an internal utility used by setupMcpExpress and createOidcServer.
+ * @internal This is an internal utility used by createOidcServer.
  *
  * @example
  * ```typescript

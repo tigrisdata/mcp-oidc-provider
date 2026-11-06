@@ -1,12 +1,12 @@
 /**
  * Standalone OIDC Server Example
  *
- * This example shows how to run the OIDC provider as a standalone server
- * and use the MCP SDK's ProxyOAuthServerProvider + mcpAuthRouter to proxy OAuth to it.
+ * This example shows how to run the OIDC provider as a standalone server.
+ * The MCP server (mcp.ts) verifies the tokens it issues with the MCP SDK v2's requireBearerAuth.
  *
  * Architecture:
  * - OIDC Server (port 4001): Handles OAuth/OIDC, DCR, token issuance
- * - MCP Server (port 3001): Your MCP server using SDK's auth proxy
+ * - MCP Server (port 3001): Your MCP server, verifies tokens from the OIDC server
  */
 
 import dotenv from 'dotenv';

@@ -10,20 +10,21 @@
 
 ---
 
-## Modes
+## Deployment
 
-### Mode 1: Standalone OIDC Server
+The OIDC server is its own Express app. Your MCP server is an OAuth resource server built with the MCP TypeScript SDK v2: it advertises the OIDC server through protected resource metadata and verifies the tokens the OIDC server issued. Both share one persistent Keyv store.
 
-Run OIDC server separately from your MCP implementation. Useful if your MCP server is in Next.js, Python, or any non-Express stack.
+`createMcpAuthProvider` serves the discovery documents with the SDK's `mcpAuthMetadataRouter`: the protected resource metadata at `/.well-known/oauth-protected-resource/<mcp path>` (RFC 9728) and the OIDC server's authorization server metadata at `/.well-known/oauth-authorization-server`. It fetches the latter once at startup, so the OIDC server starts first.
 
 ```
-┌────────────────────┐      ┌────────────────────┐
-│  OIDC Server       │      │  MCP Server        │
-│  (port 4001)       │      │  (port 3001)       │
-│                    │      │                    │
-│  createOidcServer  │◄────►│  Your MCP impl     │
-│  from /oidc        │      │  (any stack)       │
-└─────────┬──────────┘      └─────────┬──────────┘
+┌────────────────────┐      ┌──────────────────────────────┐
+│  OIDC Server       │      │  MCP Server                  │
+│  (port 4001)       │      │  (port 3001)                 │
+│                    │      │                              │
+│  createOidcServer  │◄────►│  requireBearerAuth (MCP SDK) │
+│  from /oidc        │      │  + createMcpAuthProvider     │
+│                    │      │    from /mcp                 │
+└─────────┬──────────┘      └─────────┬────────────────────┘
           │                           │
           └───────────┬───────────────┘
                       ▼
@@ -33,24 +34,7 @@ Run OIDC server separately from your MCP implementation. Useful if your MCP serv
           └──────────────────────┘
 ```
 
-### Mode 2: Integrated
-
-Run OIDC + MCP in a single Express app. Simpler setup for new projects.
-
-```
-┌─────────────────────────────────────┐
-│  Single Express App (port 3000)     │
-│                                     │
-│  setupMcpExpress from /mcp          │
-│                                     │
-│  ┌───────────────┐ ┌─────────────┐  │
-│  │ OIDC Routes   │ │ MCP Routes  │  │
-│  │ /authorize    │ │ POST /mcp   │  │
-│  │ /token        │ │             │  │
-│  │ /jwks         │ │             │  │
-│  └───────────────┘ └─────────────┘  │
-└─────────────────────────────────────┘
-```
+Run them as two processes or two ports of one process. The MCP server can also live in another stack: token verification is a JWT signature check against the OIDC server's `/jwks` plus a session lookup in the shared store.
 
 ---
 
@@ -123,22 +107,16 @@ When an MCP request comes in with a Bearer token:
 4. Load UserSession from store
                     │
                     ▼
-5. Check IdP token expiry
-   └── Expires within 60s? → Auto-refresh
-                    │
-                    ▼
-6. Return AuthenticatedUser
+5. Return AuthInfo (req.auth)
    {
-     accountId, userId, claims,
-     tokenSet, customData
+     token, clientId, scopes, expiresAt, resource,
+     extra: { sub, claims, idpTokens, customData }
    }
 ```
 
 ---
 
-## Automatic Token Refresh
-
-Both token types are automatically refreshed:
+## Token Refresh
 
 ### OIDC Tokens (for MCP clients)
 
@@ -146,21 +124,7 @@ MCP clients use refresh tokens to get new access tokens. Standard OAuth flow, ha
 
 ### IdP Tokens (for upstream APIs)
 
-```
-Token issued          60s before expiry        Token expires
-     │                       │                      │
-     ▼                       ▼                      ▼
-─────┼───────────────────────┼──────────────────────┼─────
-     │                       │                      │
-     │   Normal use          │  Auto-refresh        │
-     │                       │  (on next request)   │
-```
-
-When `validateToken()` runs and IdP tokens expire within 60 seconds:
-
-1. Call `idpClient.refreshToken(refreshToken)`
-2. Update UserSession with new tokens
-3. Continue request with fresh tokens
+The verifier returns the stored IdP token set as is (`getIdpTokens(req.auth)`, including `refreshToken` and `expiresAt`); it does not refresh it. Refresh with your IdP when `expiresAt` is near.
 
 ---
 
@@ -183,40 +147,47 @@ The user runs the CLI command to add your MCP server.
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Step 2: Dynamic Client Registration (First Time Only)
+### Step 2: Discovery and Dynamic Client Registration (First Time Only)
 
-Claude Code registers itself with your OIDC server. This happens once and is cached.
+Claude Code finds your OIDC server through the MCP server's protected resource metadata, then registers itself with the OIDC server. This happens once and is cached.
 
 ```
-Claude Code                               Your MCP Server
-  │                                             │
-  │  GET /.well-known/oauth-authorization-server│
-  │ ───────────────────────────────────────────►│
-  │                                             │
-  │  { registration_endpoint: "/register" }     │
-  │ ◄───────────────────────────────────────────│
-  │                                             │
-  │  POST /register                             │
-  │  {                                          │
-  │    client_name: "Claude Code",              │
-  │    redirect_uris: ["http://127.0.0.1:*/.."] │
-  │  }                                          │
-  │ ───────────────────────────────────────────►│
-  │                                             │
-  │                      ┌──────────────────────┤
-  │                      │ Store in Keyv:       │
-  │                      │                      │
-  │                      │ Key: oidc:Client:xyz │
-  │                      │ Value: {             │
-  │                      │   client_id,         │
-  │                      │   client_secret,     │
-  │                      │   redirect_uris      │
-  │                      │ }                    │
-  │                      │ TTL: 14 days         │
-  │                      └──────────────────────┤
-  │                                             │
-  │  { client_id: "xyz", client_secret: "..." } │
-  │ ◄───────────────────────────────────────────│
+Claude Code                    Your MCP Server                 Your OIDC Server
+  │                                   │                               │
+  │  POST /mcp (no token)             │                               │
+  │ ─────────────────────────────────►│                               │
+  │  401 WWW-Authenticate: Bearer     │                               │
+  │    resource_metadata="…/.well-known/oauth-protected-resource/mcp" │
+  │ ◄─────────────────────────────────│                               │
+  │                                   │                               │
+  │  GET /.well-known/oauth-protected-resource/mcp                    │
+  │ ─────────────────────────────────►│                               │
+  │  { authorization_servers: ["https://auth.myapp.com"] }            │
+  │ ◄─────────────────────────────────│                               │
+  │                                   │                               │
+  │  GET /.well-known/oauth-authorization-server                      │
+  │ ─────────────────────────────────────────────────────────────────►│
+  │  { registration_endpoint: "/register", ... }                      │
+  │ ◄─────────────────────────────────────────────────────────────────│
+  │                                                                   │
+  │  POST /register                                                   │
+  │  { client_name: "Claude Code",                                    │
+  │    redirect_uris: ["http://127.0.0.1:*/.."] }                     │
+  │ ─────────────────────────────────────────────────────────────────►│
+  │                                            ┌──────────────────────┤
+  │                                            │ Store in Keyv:       │
+  │                                            │                      │
+  │                                            │ Key: oidc:Client:xyz │
+  │                                            │ Value: {             │
+  │                                            │   client_id,         │
+  │                                            │   client_secret,     │
+  │                                            │   redirect_uris      │
+  │                                            │ }                    │
+  │                                            │ TTL: 14 days         │
+  │                                            └──────────────────────┤
+  │                                                                   │
+  │  { client_id: "xyz", client_secret: "..." }                       │
+  │ ◄─────────────────────────────────────────────────────────────────│
 ```
 
 ### Step 3: Authorization Request
@@ -224,7 +195,7 @@ Claude Code                               Your MCP Server
 Claude Code opens a browser window to your authorization endpoint.
 
 ```
-Claude Code                              Your MCP Server
+Claude Code                              Your OIDC Server
   │                                            │
   │  Opens browser:                            │
   │  GET /authorize                            │
@@ -255,10 +226,10 @@ Claude Code                              Your MCP Server
 
 ### Step 4: Redirect to Upstream IdP
 
-Your MCP server redirects to Auth0/Clerk for actual authentication.
+Your OIDC server redirects to Auth0/Clerk for actual authentication.
 
 ```
-Your MCP Server                               Auth0/Clerk
+Your OIDC Server                               Auth0/Clerk
   │                                               │
   │  Generate PKCE, state, nonce                  │
   │                                               │
@@ -312,10 +283,10 @@ User sees Auth0/Clerk login page and enters credentials.
 
 ### Step 6: IdP Callback - Exchange Code for Tokens
 
-Auth0 redirects back to your MCP server with an authorization code.
+Auth0 redirects back to your OIDC server with an authorization code.
 
 ```
-Auth0                                       Your MCP Server
+Auth0                                       Your OIDC Server
   │                                               │
   │  302 Redirect                                 │
   │  Location: /oauth/callback?code=idp_code      │
@@ -371,10 +342,10 @@ Auth0                                       Your MCP Server
 
 ### Step 7: Redirect Back to MCP Client with Code
 
-Your MCP server redirects back to Claude Code's local callback server.
+Your OIDC server redirects back to Claude Code's local callback server.
 
 ```
-Your MCP Server                            Claude Code
+Your OIDC Server                            Claude Code
   │                                            │
   │  302 Redirect                              │
   │  Location: http://127.0.0.1:9876/callback  │
@@ -390,7 +361,7 @@ Your MCP Server                            Claude Code
 Claude Code exchanges the code for access and refresh tokens.
 
 ```
-Claude Code                              Your MCP Server
+Claude Code                              Your OIDC Server
   │                                            │
   │  POST /token                               │
   │  {                                         │
@@ -461,60 +432,62 @@ Claude Code                               Your MCP Server
   │ ──────────────────────────────────────────►│
   │                                            │
   │                      ┌─────────────────────┤
-  │                      │ 1. Extract JWT      │
+  │                      │ requireBearerAuth   │
+  │                      │ (MCP SDK)           │
+  │                      │                     │
+  │                      │ 1. Extract Bearer   │
+  │                      │    token            │
+  │                      └─────────┬───────────┤
+  │                                ▼           │
+  │                      ┌─────────────────────┤
+  │                      │ verifier            │
+  │                      │ (createMcpAuth-     │
+  │                      │  Provider)          │
   │                      │                     │
   │                      │ 2. Fetch JWKS from  │
-  │                      │    /jwks endpoint   │
+  │                      │    OIDC /jwks       │
   │                      │    (cached)         │
-  │                      │                     │
   │                      │ 3. Verify signature │
-  │                      │                     │
-  │                      │ 4. Extract 'sub'    │
-  │                      │    claim = sessionId│
-  │                      └─────────────────────┤
-  │                                            │
-  │                      ┌─────────────────────┤
-  │                      │ 5. Load from Keyv:  │
+  │                      │    and issuer       │
+  │                      │ 4. Load from Keyv:  │
   │                      │    session:{sub}    │
-  │                      │                     │
-  │                      │ 6. Check expiresAt  │
-  │                      │    vs current time  │
-  │                      │                     │
-  │                      │ If expires in <60s: │
-  │                      │   → Refresh IdP tok │
-  │                      │   → Update session  │
-  │                      └─────────────────────┤
-  │                                            │
+  │                      └─────────┬───────────┤
+  │                                ▼           │
   │                      ┌─────────────────────┤
-  │                      │ 7. Attach to req:   │
+  │                      │ 5. SDK checks       │
+  │                      │    expiresAt,       │
+  │                      │    expectedResource │
+  │                      │    (aud),           │
+  │                      │    requiredScopes   │
   │                      │                     │
-  │                      │ req.user = {        │
-  │                      │   accountId,        │
-  │                      │   userId,           │
-  │                      │   claims,           │
-  │                      │   tokenSet: {       │
-  │                      │     accessToken, ←──┼── Use this for
-  │                      │     idToken,        │   upstream APIs
-  │                      │     refreshToken    │
-  │                      │   },                │
-  │                      │   customData        │
+  │                      │ 6. req.auth = {     │
+  │                      │   token, clientId,  │
+  │                      │   scopes, expiresAt,│
+  │                      │   resource,         │
+  │                      │   extra: {          │
+  │                      │     sub, claims,    │
+  │                      │     idpTokens, ←────┼── Use this for
+  │                      │     customData      │   upstream APIs
+  │                      │   }                 │
   │                      │ }                   │
   │                      └─────────────────────┤
 ```
+
+Failures answer `401 invalid_token` or `403 insufficient_scope` with a `WWW-Authenticate: Bearer` challenge that carries `resource_metadata`, so the client can (re)discover the authorization server.
 
 ### Step 11: Tool Executes with IdP Token
 
 Your tool handler uses the IdP access token to call upstream APIs.
 
 ```javascript
-// In your MCP tool handler
-handleMcpRequest(async (req, res) => {
-  const user = req.user; // ← Populated by auth middleware
+// In your MCP route handler
+app.post('/mcp', requireBearerAuth({ verifier, resourceMetadataUrl }), async (req, res) => {
+  const tokens = getIdpTokens(req.auth); // ← IdP token set from the user session
 
   // Use IdP access token to call Upstream API
   const response = await fetch('https://api.upstream.com/buckets', {
     headers: {
-      Authorization: `Bearer ${user.tokenSet.accessToken}`, // ← IdP token
+      Authorization: `Bearer ${tokens.accessToken}`, // ← IdP token
     },
   });
 
@@ -575,7 +548,7 @@ Cookies maintain state during the browser-based OAuth flow (Steps 3-7):
 ```
 
 ```
-Browser                                  Your MCP Server
+Browser                                  Your OIDC Server
   │                                            │
   │  GET /authorize?client_id=xyz              │
   │ ──────────────────────────────────────────►│
@@ -650,7 +623,7 @@ After the complete flow, here's what's in your Keyv store:
 ## Token Validation
 
 ```
-// From src/mcp/auth-provider.ts:221-223
+// From src/mcp/auth-provider.ts (verifier.verifyAccessToken)
 const { payload } = await jwtVerify(token, JWKS, {
   issuer: oidcBaseUrl,
 });
@@ -673,7 +646,7 @@ The current implementation doesn't check:
 
 | Check                | Why Not                                        |
 | -------------------- | ---------------------------------------------- |
-| Audience (aud)       | Not passed to jwtVerify() - could be added     |
+| Audience (aud)       | Checked by `requireBearerAuth` when you pass `expectedResource`; the verifier exposes `aud` as `AuthInfo.resource` |
 | Token Revocation     | Would require checking a revocation list/store |
 | Real-time IdP status | JWT verification is offline by design          |
 

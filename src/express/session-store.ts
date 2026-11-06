@@ -5,7 +5,7 @@ import type { KeyValueStore } from '../types.js';
  * Express session store adapter for Keyv-compatible stores.
  * Allows using any Keyv backend (Tigris, Redis, etc.) as Express session storage.
  *
- * @internal This is an internal utility used by setupMcpExpress and createOidcServer.
+ * @internal This is an internal utility used by createOidcServer.
  *
  * @example
  * ```typescript

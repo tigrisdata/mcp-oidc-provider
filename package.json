@@ -78,6 +78,8 @@
     "openid-client": "^6.8.4"
   },
   "peerDependencies": {
+    "@modelcontextprotocol/express": ">=2.0.0",
+    "@modelcontextprotocol/server": ">=2.0.0",
     "express": "^4.0.0 || ^5.0.0",
     "express-session": "^1.18.0",
     "keyv": "^5.0.0"
@@ -97,6 +99,8 @@
     "@changesets/changelog-github": "^1.0.1",
     "@changesets/cli": "^3.0.3",
     "@eslint/js": "^10.0.1",
+    "@modelcontextprotocol/express": "^2.0.2",
+    "@modelcontextprotocol/server": "^2.4.0",
     "@types/express": "^5.0.6",
     "@types/express-session": "^1.19.0",
     "@types/node": "^25.6.0",

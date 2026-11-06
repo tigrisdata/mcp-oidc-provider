@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   createExpressAdapter,
   isOidcProviderRoute,
-  createExpressAuthMiddleware,
   KeyvSessionStore,
   createMcpCorsMiddleware,
 } from './index.js';
@@ -16,11 +15,6 @@ describe('express/index exports', () => {
   it('should export isOidcProviderRoute', () => {
     expect(isOidcProviderRoute).toBeDefined();
     expect(typeof isOidcProviderRoute).toBe('function');
-  });
-
-  it('should export createExpressAuthMiddleware', () => {
-    expect(createExpressAuthMiddleware).toBeDefined();
-    expect(typeof createExpressAuthMiddleware).toBe('function');
   });
 
   it('should export KeyvSessionStore', () => {
