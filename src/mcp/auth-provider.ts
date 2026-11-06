@@ -1,49 +1,41 @@
 /**
- * MCP Auth Provider - A helper to create ProxyOAuthServerProvider for MCP servers.
+ * MCP Auth Provider - connects an mcp-oidc-provider OIDC server to an MCP
+ * resource server built on the MCP TypeScript SDK v2.
  *
- * This module provides a simplified way to configure the MCP SDK's ProxyOAuthServerProvider
- * to work with an mcp-oidc-provider OIDC server.
+ * With SDK v2 an MCP server is a pure OAuth resource server: it advertises its
+ * authorization server through OAuth 2.0 Protected Resource Metadata (RFC 9728)
+ * and verifies bearer tokens with an `OAuthTokenVerifier`. This module provides
+ * both halves for a standalone mcp-oidc-provider server:
+ *
+ * - `verifier` - an `OAuthTokenVerifier` for `requireBearerAuth` from
+ *   `@modelcontextprotocol/express`
+ * - `mcpRoutes` - the SDK's `mcpAuthMetadataRouter` (protected resource
+ *   metadata plus the OIDC server's authorization server metadata, fetched
+ *   once at startup) and CORS for the MCP endpoint
  */
 
-import { Router, type Request, type Response } from 'express';
+import { Router } from 'express';
 import { Keyv } from 'keyv';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
+import {
+  OAuthError,
+  OAuthErrorCode,
+  type AuthInfo,
+  type AuthMetadataOptions,
+  type OAuthTokenVerifier,
+} from '@modelcontextprotocol/server';
+import {
+  getOAuthProtectedResourceMetadataUrl,
+  mcpAuthMetadataRouter,
+} from '@modelcontextprotocol/express';
 import { createMcpCorsMiddleware } from '../express/cors.js';
 import {
   DEFAULT_JWKS_CACHE_OPTIONS,
+  DEFAULT_SCOPES,
   STORAGE_NAMESPACES,
   type JwksCacheOptions,
 } from '../core/config.js';
-import type { KeyvLike, UserSession, AuthenticatedUser } from '../types.js';
-
-/**
- * Client information stored by oidc-provider.
- * This matches the OAuthClientInformationFull interface from the MCP SDK.
- */
-export interface ClientInfo {
-  client_id: string;
-  client_secret?: string;
-  redirect_uris: string[];
-  grant_types?: string[];
-  response_types?: string[];
-  client_name?: string;
-  client_uri?: string;
-  logo_uri?: string;
-  token_endpoint_auth_method?: string;
-  scope?: string;
-}
-
-/**
- * Auth info returned after token verification.
- * This matches the AuthInfo interface from the MCP SDK.
- */
-export interface AuthInfo {
-  token: string;
-  clientId: string;
-  scopes: string[];
-  expiresAt?: number;
-  extra?: Record<string, unknown>;
-}
+import type { KeyvLike, UserSession } from '../types.js';
 
 /**
  * Options for creating an MCP auth provider.
@@ -51,7 +43,9 @@ export interface AuthInfo {
 export interface McpAuthProviderOptions {
   /**
    * The base URL of the OIDC server (e.g., 'http://localhost:4001').
-   * This is used to construct OAuth endpoints and verify tokens.
+   * Used as the token issuer, for JWKS fetching, and as the advertised authorization server.
+   * Its authorization server metadata is fetched once when the provider is created,
+   * so the OIDC server must be reachable at that point.
    */
   oidcBaseUrl: string;
 
@@ -69,12 +63,13 @@ export interface McpAuthProviderOptions {
 
   /**
    * The path to the MCP endpoint (e.g., '/mcp').
+   * Determines the resource identifier and the protected resource metadata URL.
    * Default: '/mcp'
    */
   mcpEndpointPath?: string;
 
   /**
-   * Scopes supported by the MCP server.
+   * Scopes advertised in the protected resource metadata (`scopes_supported`).
    * Default: ['openid', 'email', 'profile', 'offline_access']
    */
   scopesSupported?: string[];
@@ -89,35 +84,9 @@ export interface McpAuthProviderOptions {
   /**
    * Callback for handling errors during token verification.
    * Useful for logging or monitoring token verification failures.
-   * The error is logged before being converted to InvalidTokenError.
+   * The error is passed here before being converted to an OAuth `invalid_token` error.
    */
   onVerifyError?: (error: unknown) => void;
-}
-
-/**
- * Configuration for ProxyOAuthServerProvider.
- * This can be passed directly to new ProxyOAuthServerProvider(config).
- */
-export interface ProxyOAuthServerProviderConfig {
-  /**
-   * OAuth endpoints for ProxyOAuthServerProvider.
-   */
-  endpoints: {
-    authorizationUrl: string;
-    tokenUrl: string;
-    revocationUrl: string;
-    registrationUrl: string;
-  };
-
-  /**
-   * Verify an access token and return auth info.
-   */
-  verifyAccessToken: (token: string) => Promise<AuthInfo>;
-
-  /**
-   * Get client information by client ID.
-   */
-  getClient: (clientId: string) => Promise<ClientInfo | undefined>;
 }
 
 /**
@@ -125,83 +94,128 @@ export interface ProxyOAuthServerProviderConfig {
  */
 export interface McpAuthProviderResult {
   /**
-   * Configuration for ProxyOAuthServerProvider.
-   * Pass this directly to: new ProxyOAuthServerProvider(proxyOAuthServerProviderConfig)
+   * Token verifier for the MCP SDK.
+   * Pass it to `requireBearerAuth({ verifier, resourceMetadataUrl })`.
+   *
+   * The returned `AuthInfo` carries `expiresAt`, `resource` (from the token's
+   * `aud` claim, so `expectedResource` checks work) and, in `extra`, the user's
+   * `sub`, `claims`, `idpTokens` and `customData` from the session.
+   * Verification failures reject with the SDK's `OAuthError` (`invalid_token`).
    */
-  proxyOAuthServerProviderConfig: ProxyOAuthServerProviderConfig;
+  verifier: OAuthTokenVerifier;
 
   /**
-   * Express router that serves CORS, health check, and OAuth 2.0 Protected Resource Metadata (RFC 9728).
-   * Mount this on your MCP server: app.use(mcpRoutes)
+   * Express router that serves the OAuth discovery documents through the MCP
+   * SDK's `mcpAuthMetadataRouter` and CORS for the MCP endpoint:
+   *
+   * - `/.well-known/oauth-protected-resource/<mcp path>` - Protected Resource
+   *   Metadata (RFC 9728). RFC 9728 derives this path from the resource
+   *   identifier, and `requireBearerAuth` advertises it in every challenge.
+   * - `/.well-known/oauth-authorization-server` - the OIDC server's
+   *   Authorization Server Metadata (RFC 8414), for clients that probe the
+   *   MCP server origin.
+   *
+   * Mount this on your MCP server: `app.use(mcpRoutes)`
    */
   mcpRoutes: Router;
 
   /**
-   * The URL of the protected resource metadata endpoint.
-   * Use this for requireBearerAuth's resourceMetadataUrl option.
+   * The URL of the protected resource metadata document
+   * (`<mcpServerBaseUrl>/.well-known/oauth-protected-resource<mcpEndpointPath>`).
+   * Use this for `requireBearerAuth`'s `resourceMetadataUrl` option.
    */
   resourceMetadataUrl: string;
 }
 
+type OAuthMetadata = AuthMetadataOptions['oauthMetadata'];
+
 /**
- * Error thrown when token verification fails.
+ * Fetch the OIDC server's Authorization Server Metadata (RFC 8414).
+ * @internal
  */
-export class InvalidTokenError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'InvalidTokenError';
+export async function fetchAuthorizationServerMetadata(
+  oidcBaseUrl: string
+): Promise<OAuthMetadata> {
+  const url = `${oidcBaseUrl}/.well-known/oauth-authorization-server`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(
+      `Failed to fetch authorization server metadata from ${url}: HTTP ${response.status}`
+    );
   }
+  const metadata = (await response.json()) as OAuthMetadata;
+  if (metadata.issuer !== oidcBaseUrl) {
+    throw new Error(
+      `Authorization server metadata issuer "${metadata.issuer}" does not match oidcBaseUrl "${oidcBaseUrl}"`
+    );
+  }
+  return metadata;
 }
 
 /**
- * Create an MCP auth provider configuration.
+ * Pick the first `aud` value that is an absolute URL.
+ * @internal
+ */
+export function resourceFromAudience(aud: unknown): URL | undefined {
+  const audiences = Array.isArray(aud) ? aud : typeof aud === 'string' ? [aud] : [];
+  for (const audience of audiences) {
+    if (typeof audience !== 'string') continue;
+    try {
+      return new URL(audience);
+    } catch {
+      // not a URL, try the next one
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Create an MCP auth provider for the MCP TypeScript SDK v2.
  *
- * This creates the configuration needed for the MCP SDK's ProxyOAuthServerProvider
- * to work with an mcp-oidc-provider OIDC server.
+ * Fetches the OIDC server's authorization server metadata once, so the OIDC
+ * server must be running. The MCP SDK rejects a non-HTTPS issuer other than
+ * `localhost`/`127.0.0.1` unless `MCP_DANGEROUSLY_ALLOW_INSECURE_ISSUER_URL=true`
+ * is set.
  *
  * @param options - Provider options
- * @returns Configuration for ProxyOAuthServerProvider and a router for protected resource metadata
+ * @returns A token verifier, a router for the metadata endpoints, and the resource metadata URL
  *
  * @example
  * ```typescript
+ * import { createMcpExpressApp, requireBearerAuth } from '@modelcontextprotocol/express';
  * import { createMcpAuthProvider } from 'mcp-oidc-provider/mcp';
- * import { ProxyOAuthServerProvider } from '@modelcontextprotocol/sdk/server/auth/providers/proxyProvider.js';
  *
- * const { proxyOAuthServerProviderConfig, mcpRoutes, resourceMetadataUrl } = createMcpAuthProvider({
+ * const { verifier, mcpRoutes, resourceMetadataUrl } = await createMcpAuthProvider({
  *   oidcBaseUrl: 'http://localhost:4001',
  *   store,
  *   mcpServerBaseUrl: 'http://localhost:3001',
  * });
  *
- * // Create the auth provider directly with the config
- * const authProvider = new ProxyOAuthServerProvider(proxyOAuthServerProviderConfig);
+ * const app = createMcpExpressApp({ host: '0.0.0.0', allowedHosts: ['localhost'] });
  *
- * // Mount the routes (includes CORS, /health, /.well-known/oauth-protected-resource)
+ * // /.well-known/oauth-protected-resource/mcp, /.well-known/oauth-authorization-server, CORS
  * app.use(mcpRoutes);
  *
- * // Use resourceMetadataUrl in requireBearerAuth
- * app.post('/mcp', requireBearerAuth({ verifier: authProvider, resourceMetadataUrl }), ...);
+ * app.post('/mcp', requireBearerAuth({ verifier, resourceMetadataUrl }), async (req, res) => {
+ *   // req.auth is the AuthInfo returned by the verifier
+ * });
  * ```
  */
-export function createMcpAuthProvider(options: McpAuthProviderOptions): McpAuthProviderResult {
+export async function createMcpAuthProvider(
+  options: McpAuthProviderOptions
+): Promise<McpAuthProviderResult> {
   const {
     oidcBaseUrl,
     store,
     mcpServerBaseUrl,
     mcpEndpointPath = '/mcp',
-    scopesSupported = ['openid', 'email', 'profile', 'offline_access'],
+    scopesSupported = DEFAULT_SCOPES,
     jwksCacheOptions,
     onVerifyError,
   } = options;
 
-  // Get the underlying store for client lookups
+  // Get the underlying store for session lookups
   const underlyingStore = store.opts?.store;
-
-  // Create a Keyv instance for client lookups (same namespace as oidc-provider uses)
-  const clientStore = new Keyv<ClientInfo>({
-    store: underlyingStore,
-    namespace: STORAGE_NAMESPACES.OIDC_CLIENT,
-  });
 
   // Create a Keyv instance for session lookups (same namespace as core provider uses)
   const sessionStore = new Keyv<UserSession>({
@@ -215,16 +229,14 @@ export function createMcpAuthProvider(options: McpAuthProviderOptions): McpAuthP
     ...jwksCacheOptions,
   });
 
-  // Create the config for ProxyOAuthServerProvider
-  const config: ProxyOAuthServerProviderConfig = {
-    endpoints: {
-      authorizationUrl: `${oidcBaseUrl}/authorize`,
-      tokenUrl: `${oidcBaseUrl}/token`,
-      revocationUrl: `${oidcBaseUrl}/token/revocation`,
-      registrationUrl: `${oidcBaseUrl}/register`,
-    },
+  // RFC 9728: the metadata URL is derived from the resource identifier (MCP endpoint URL)
+  const resourceServerUrl = new URL(`${mcpServerBaseUrl}${mcpEndpointPath}`);
+  const resourceMetadataUrl = getOAuthProtectedResourceMetadataUrl(resourceServerUrl);
 
-    verifyAccessToken: async (token: string): Promise<AuthInfo> => {
+  const oauthMetadata = await fetchAuthorizationServerMetadata(oidcBaseUrl);
+
+  const verifier: OAuthTokenVerifier = {
+    async verifyAccessToken(token: string): Promise<AuthInfo> {
       try {
         const { payload } = await jwtVerify(token, JWKS, {
           issuer: oidcBaseUrl,
@@ -240,6 +252,8 @@ export function createMcpAuthProvider(options: McpAuthProviderOptions): McpAuthP
           clientId: (payload['client_id'] as string) ?? '',
           scopes: typeof payload['scope'] === 'string' ? payload['scope'].split(' ') : [],
           expiresAt: payload.exp,
+          resource: resourceFromAudience(payload.aud),
+          resourceMetadataUrl,
           extra: {
             sub,
             // Include user claims from the session
@@ -253,44 +267,24 @@ export function createMcpAuthProvider(options: McpAuthProviderOptions): McpAuthP
       } catch (error) {
         // Call error callback if provided for debugging/logging
         onVerifyError?.(error);
-        throw new InvalidTokenError('Invalid or expired token');
+        // The SDK maps OAuthError(invalid_token) to a 401 with a WWW-Authenticate challenge
+        throw new OAuthError(OAuthErrorCode.InvalidToken, 'Invalid or expired token');
       }
-    },
-
-    getClient: async (clientId: string): Promise<ClientInfo | undefined> => {
-      // Look up client in the same store that oidc-provider uses
-      const key = `Client:${clientId}`;
-      const client = await clientStore.get(key);
-      return client ?? undefined;
     },
   };
 
-  // Create router for protected resource metadata (RFC 9728) and middleware
   const router = Router();
 
-  // CORS middleware for MCP clients (includes MCP Inspector origin by default)
+  // OAuth discovery documents from the MCP SDK (each with its own permissive CORS):
+  // protected resource metadata at the path-based well-known URL and the OIDC
+  // server's authorization server metadata, verbatim.
+  router.use(mcpAuthMetadataRouter({ oauthMetadata, resourceServerUrl, scopesSupported }));
+
+  // CORS for the MCP endpoint itself (includes the MCP Inspector origin by default)
   router.use(createMcpCorsMiddleware({ baseUrl: mcpServerBaseUrl }));
 
-  // Health check endpoint
-  router.get('/health', (_req: Request, res: Response) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
-  });
-
-  // OAuth 2.0 Protected Resource Metadata (RFC 9728)
-  // This endpoint tells clients how to authenticate with this resource server
-  router.get('/.well-known/oauth-protected-resource', (_req: Request, res: Response) => {
-    res.json({
-      resource: `${mcpServerBaseUrl}${mcpEndpointPath}`,
-      authorization_servers: [oidcBaseUrl],
-      scopes_supported: scopesSupported,
-      bearer_methods_supported: ['header'],
-    });
-  });
-
-  const resourceMetadataUrl = `${mcpServerBaseUrl}/.well-known/oauth-protected-resource`;
-
   return {
-    proxyOAuthServerProviderConfig: config,
+    verifier,
     mcpRoutes: router,
     resourceMetadataUrl,
   };
@@ -312,28 +306,17 @@ export interface IdpTokenSet {
 }
 
 /**
- * Get IdP tokens from either req.user (setupMcpExpress) or req.auth (requireBearerAuth).
+ * Get the IdP token set from the `AuthInfo` produced by the verifier
+ * (`req.auth` after `requireBearerAuth`).
  *
- * This helper abstracts the different locations where IdP tokens are stored
- * depending on which authentication approach you use.
- *
- * @param userOrAuth - Either req.user (AuthenticatedUser) or req.auth (AuthInfo)
+ * @param authInfo - `req.auth` from `requireBearerAuth`
  * @returns The IdP token set, or undefined if not available
  *
  * @example
  * ```typescript
  * import { getIdpTokens } from 'mcp-oidc-provider/mcp';
  *
- * // Works with setupMcpExpress (req.user)
- * handleMcpRequest(async (req, res) => {
- *   const tokens = getIdpTokens(req.user);
- *   if (tokens) {
- *     console.log('IdP access token:', tokens.accessToken);
- *   }
- * });
- *
- * // Works with requireBearerAuth (req.auth)
- * app.post('/mcp', requireBearerAuth({ verifier }), async (req, res) => {
+ * app.post('/mcp', requireBearerAuth({ verifier, resourceMetadataUrl }), async (req, res) => {
  *   const tokens = getIdpTokens(req.auth);
  *   if (tokens) {
  *     console.log('IdP access token:', tokens.accessToken);
@@ -341,28 +324,7 @@ export interface IdpTokenSet {
  * });
  * ```
  */
-export function getIdpTokens(
-  userOrAuth: AuthenticatedUser | AuthInfo | undefined | null
-): IdpTokenSet | undefined {
-  if (!userOrAuth) {
-    return undefined;
-  }
-
-  // Check for AuthenticatedUser (from setupMcpExpress via req.user)
-  // AuthenticatedUser has tokenSet directly on it
-  if ('tokenSet' in userOrAuth && userOrAuth.tokenSet) {
-    const tokenSet = userOrAuth.tokenSet as IdpTokenSet;
-    return tokenSet;
-  }
-
-  // Check for AuthInfo (from requireBearerAuth via req.auth)
-  // AuthInfo has idpTokens in extra
-  if ('extra' in userOrAuth && userOrAuth.extra) {
-    const extra = userOrAuth.extra as Record<string, unknown>;
-    if (extra['idpTokens']) {
-      return extra['idpTokens'] as IdpTokenSet;
-    }
-  }
-
-  return undefined;
+export function getIdpTokens(authInfo: AuthInfo | undefined | null): IdpTokenSet | undefined {
+  const idpTokens = authInfo?.extra?.['idpTokens'];
+  return idpTokens ? (idpTokens as IdpTokenSet) : undefined;
 }

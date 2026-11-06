@@ -13,7 +13,7 @@ Implementing a [remote hosted MCP server](https://support.claude.com/en/articles
 
 This package takes care of those limitations for you so you can focus on implementing your tools, resources, and prompts instead of spending hours investigating why your implementation doesn't work with Cursor or logs you out from Claude every few hours.
 
-This package allows you to run either in standalone mode or integrate it into your MCP implementation. It works with any OIDC-compliant identity provider like Auth0, Clerk, Okta, Keycloak, Azure AD, Google, and more.
+The OIDC server runs as its own Express app. Your MCP server stays a plain OAuth resource server built with the [MCP TypeScript SDK v2](https://github.com/modelcontextprotocol/typescript-sdk): it verifies the tokens the OIDC server issues, so it can live in any stack. It works with any OIDC-compliant identity provider like Auth0, Clerk, Okta, Keycloak, Azure AD, Google, and more.
 
 It uses different packages under the hood to glue everything together:
 
@@ -25,11 +25,19 @@ It uses different packages under the hood to glue everything together:
 | `keyv`            | Universal key-value storage abstraction. Used for sessions, tokens, grants, and OIDC adapter data                                |
 | `express`         | Web framework for the Express adapter. Provides routing, middleware, and HTTP handling                                           |
 | `express-session` | Session management for Express. Stores login state during OAuth flows                                                            |
+| `@modelcontextprotocol/server` | MCP TypeScript SDK v2 (peer dependency of `mcp-oidc-provider/mcp`). `createMcpAuthProvider` returns an `OAuthTokenVerifier` for the SDK's `requireBearerAuth` |
+| `@modelcontextprotocol/express` | MCP SDK v2 Express helpers (peer dependency of `mcp-oidc-provider/mcp`). `createMcpAuthProvider` serves the OAuth discovery documents with its `mcpAuthMetadataRouter` |
 
 ## Installation
 
 ```bash
 npm install mcp-oidc-provider keyv
+```
+
+`mcp-oidc-provider/mcp` builds on the MCP TypeScript SDK v2 (`@modelcontextprotocol/server` and `@modelcontextprotocol/express` are peer dependencies), so your MCP server also needs the SDK packages:
+
+```bash
+npm install @modelcontextprotocol/server @modelcontextprotocol/express @modelcontextprotocol/node
 ```
 
 ## JWKS (Signing Keys)
@@ -79,17 +87,12 @@ If you are loading the JWKS from an environment variable, we suggest _not_ using
 
 ## Quick Start
 
-Choose your deployment:
+The setup has two parts that share one persistent Keyv store (e.g., Tigris, Redis):
 
-- **[Standalone OIDC Server](#option-1--standalone-oidc-server)** – Use when your MCP server uses a framework other than Express (e.g., Next.js, Fastify, custom server). The OIDC server runs separately and your MCP server proxies auth requests to it.
+1. **OIDC server** (`createOidcServer`) - what MCP clients talk to: Dynamic Client Registration, authorization, tokens and JWKS. It logs users in at your IdP.
+2. **MCP server** - your MCP implementation. It advertises the OIDC server through protected resource metadata and verifies the tokens it issued with the MCP SDK's `requireBearerAuth`; `createMcpAuthProvider` supplies the verifier and the metadata routes.
 
-- **[Integrated OIDC + MCP](#option-2--mcp-server-with-integrated-oidc)** – Simpler, single Express app hosting both OIDC and MCP in the same process.
-
-### Option 1: Standalone OIDC Server
-
-That is useful if you already have your MCP implementation in a different stack than express js. You can have the implementation in nextjs, then you can run this server standalone and proxy the Auth requests to it using the MCP SDK's `ProxyOAuthServerProvider`. See the [standalone-oidc example](./example/standalone-oidc).
-
-Both servers must share the same persistent Keyv store (e.g., Tigris, Redis) so the MCP server can look up tokens issued by the OIDC server.
+Run them as two processes or two ports of one process. See the [standalone-oidc example](./example/standalone-oidc).
 
 **auth.ts** - OIDC Server (port 4001)
 
@@ -136,12 +139,9 @@ await oidcServer.start();
 <summary>TypeScript code</summary>
 
 ```typescript
-import express from 'express';
 import { Keyv } from 'keyv';
 import { KeyvTigris } from '@tigrisdata/keyv-tigris';
-import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
-import { ProxyOAuthServerProvider } from '@modelcontextprotocol/sdk/server/auth/providers/proxyProvider.js';
-import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';
+import { createMcpExpressApp, requireBearerAuth } from '@modelcontextprotocol/express';
 import { createMcpAuthProvider } from 'mcp-oidc-provider/mcp';
 
 const OIDC_BASE_URL = process.env.OIDC_BASE_URL ?? 'http://localhost:4001';
@@ -151,81 +151,37 @@ const MCP_BASE_URL = process.env.MCP_BASE_URL ?? `http://localhost:${MCP_PORT}`;
 // Same persistent store as the OIDC server
 const store = new Keyv({ store: new KeyvTigris() });
 
-const mcpApp = express();
-
-// Get config for ProxyOAuthServerProvider
-const { proxyOAuthServerProviderConfig, mcpRoutes, resourceMetadataUrl } = createMcpAuthProvider({
+// Token verifier for the MCP SDK plus the OAuth metadata routes. Fetches the
+// OIDC server's metadata once, so start the OIDC server first.
+const { verifier, mcpRoutes, resourceMetadataUrl } = await createMcpAuthProvider({
   oidcBaseUrl: OIDC_BASE_URL,
   store,
   mcpServerBaseUrl: MCP_BASE_URL,
 });
 
-// Create auth provider
-const authProvider = new ProxyOAuthServerProvider(proxyOAuthServerProviderConfig);
+// Express app from the MCP SDK: JSON body parsing and DNS rebinding protection
+const mcpApp = createMcpExpressApp({
+  host: '0.0.0.0',
+  allowedHosts: [new URL(MCP_BASE_URL).hostname],
+});
 
-// Mount routes (includes CORS, health check, and protected resource metadata)
+// OAuth discovery documents (/.well-known/oauth-protected-resource/mcp and the
+// OIDC server's /.well-known/oauth-authorization-server) plus CORS for /mcp
 mcpApp.use(mcpRoutes);
 
-// Install MCP auth router
-mcpApp.use(
-  mcpAuthRouter({
-    provider: authProvider,
-    issuerUrl: new URL(OIDC_BASE_URL),
-    baseUrl: new URL(MCP_BASE_URL),
-  })
-);
-
-// Protected MCP endpoint
-mcpApp.use(express.json());
 mcpApp.post(
   '/mcp',
-  requireBearerAuth({ verifier: authProvider, resourceMetadataUrl }),
+  requireBearerAuth({
+    verifier,
+    resourceMetadataUrl,
+    expectedResource: new URL(`${MCP_BASE_URL}/mcp`), // only accept tokens issued for this server
+  }),
   async (req, res) => {
-    // Your MCP handler here
+    // req.auth holds the verified token info; your MCP handler here
   }
 );
 
 mcpApp.listen(MCP_PORT);
-```
-
-</details>
-
-### Option 2: MCP Server with Integrated OIDC
-
-For simpler deployments where OIDC and MCP run in the same Express app. See the [mcp-integrated-oidc example](./example/mcp-integrated-oidc).
-
-<details>
-<summary>TypeScript code</summary>
-
-```typescript
-import { Keyv } from 'keyv';
-import { setupMcpExpress } from 'mcp-oidc-provider/mcp';
-import { OidcClient } from 'mcp-oidc-provider/oidc';
-import { type JWKS } from 'mcp-oidc-provider';
-
-// Parse JWKS from environment variable (required for production)
-const jwks: JWKS | undefined = process.env.JWKS ? JSON.parse(process.env.JWKS) : undefined;
-
-const { app, handleMcpRequest } = setupMcpExpress({
-  idpClient: new OidcClient({
-    issuer: 'https://your-tenant.auth0.com', // or any OIDC issuer
-    clientId: process.env.OIDC_CLIENT_ID!,
-    clientSecret: process.env.OIDC_CLIENT_SECRET!,
-    redirectUri: `${process.env.BASE_URL}/oauth/callback`,
-  }),
-  store: new Keyv(),
-  baseUrl: process.env.BASE_URL!,
-  secret: process.env.SESSION_SECRET!,
-  jwks,
-});
-
-// Handle MCP requests - user is available via req.user
-handleMcpRequest(async (req, res) => {
-  console.log('Authenticated user:', req.user);
-  // Your MCP server logic here
-});
-
-app.listen(3000);
 ```
 
 </details>
@@ -340,21 +296,16 @@ new OidcClient({
 | `additionalCorsOrigins` | `string[]`    | No       | Additional origins to allow for CORS     |
 | `onListen`              | `function`    | No       | Callback when server starts              |
 
-### setupMcpExpress Options (from `mcp-oidc-provider/mcp`)
-
-| Option                  | Type               | Required | Description                              |
-| ----------------------- | ------------------ | -------- | ---------------------------------------- |
-| `idpClient`             | `IOidcClient`      | Yes      | OIDC client instance                     |
-| `store`                 | `Keyv`             | Yes      | Keyv instance for storage                |
-| `baseUrl`               | `string`           | Yes      | Base URL of the server                   |
-| `secret`                | `string`           | Yes      | Secret for signing cookies/sessions      |
-| `jwks`                  | `JWKS`             | No       | Custom JWKS for signing tokens           |
-| `isProduction`          | `boolean`          | No       | Production mode flag                     |
-| `sessionMaxAge`         | `number`           | No       | Session max age in ms (default: 30 days) |
-| `additionalCorsOrigins` | `string[]`         | No       | Additional origins to allow for CORS     |
-| `customMiddleware`      | `RequestHandler[]` | No       | Custom middleware to run after CORS      |
-
 ### createMcpAuthProvider Options (from `mcp-oidc-provider/mcp`)
+
+Returns a promise of `{ verifier, mcpRoutes, resourceMetadataUrl }`: pass `verifier` and `resourceMetadataUrl` to the MCP SDK's `requireBearerAuth` (add `expectedResource` to bind tokens to your MCP URL and `requiredScopes` for scope checks), and mount `mcpRoutes` on your MCP server. Requires `@modelcontextprotocol/server` and `@modelcontextprotocol/express`.
+
+`mcpRoutes` serves the OAuth discovery documents through the MCP SDK's `mcpAuthMetadataRouter`, plus CORS for the MCP endpoint:
+
+- `/.well-known/oauth-protected-resource<mcpEndpointPath>` - protected resource metadata (RFC 9728). This is the URL `requireBearerAuth` advertises in its `WWW-Authenticate` challenges, and the one MCP clients derive from the MCP endpoint URL. The root document is not served for a non-root MCP endpoint.
+- `/.well-known/oauth-authorization-server` - the OIDC server's authorization server metadata, for clients that probe the MCP server origin. It is fetched once when the provider is created, so start the OIDC server before the MCP server.
+
+The MCP SDK only accepts an HTTPS issuer (or `localhost`/`127.0.0.1`). For another HTTP issuer in development, set `MCP_DANGEROUSLY_ALLOW_INSECURE_ISSUER_URL=true`.
 
 | Option             | Type               | Required | Description                                                 |
 | ------------------ | ------------------ | -------- | ----------------------------------------------------------- |
@@ -364,31 +315,21 @@ new OidcClient({
 | `mcpEndpointPath`  | `string`           | No       | MCP endpoint path (default: `/mcp`)                         |
 | `scopesSupported`  | `string[]`         | No       | Supported OAuth scopes                                      |
 | `jwksCacheOptions` | `JwksCacheOptions` | No       | JWKS cache settings (default: 30s cooldown, 10min cache)    |
+| `onVerifyError`    | `function`         | No       | Called with the underlying error when a token is rejected   |
 
 ## Accessing IdP Tokens
 
-When you need to call upstream APIs, use the `getIdpTokens` helper. It works with both authentication patterns:
+When you need to call upstream APIs, read the IdP token set from the verified token info (`req.auth`) with the `getIdpTokens` helper:
 
 ```typescript
 import { getIdpTokens } from 'mcp-oidc-provider/mcp';
 
-// Works with setupMcpExpress (req.user)
-handleMcpRequest(async (req, res) => {
-  const tokens = getIdpTokens(req.user);
+app.post('/mcp', requireBearerAuth({ verifier, resourceMetadataUrl }), async (req, res) => {
+  const tokens = getIdpTokens(req.auth);
   if (tokens) {
     const userInfo = await fetch('https://my-api.com/api/userInfo', {
       headers: { Authorization: `Bearer ${tokens.accessToken}` },
     });
-  }
-});
-
-// Works with requireBearerAuth (req.auth) - standalone OIDC setup
-app.post('/mcp', requireBearerAuth({ verifier: authProvider }), async (req, res) => {
-  const tokens = getIdpTokens(req.auth);
-  if (tokens) {
-    // tokens.accessToken - IdP access token
-    // tokens.idToken - IdP ID token
-    // tokens.refreshToken - IdP refresh token
   }
 });
 ```
@@ -404,10 +345,7 @@ interface IdpTokenSet {
 }
 ```
 
-You can also access tokens directly if preferred:
-
-- `req.user.tokenSet` (with `setupMcpExpress`)
-- `req.auth.extra.idpTokens` (with `requireBearerAuth`)
+The same data is available directly as `req.auth.extra.idpTokens`, next to `req.auth.extra.claims` (ID token claims) and `req.auth.extra.customData` (from `extractCustomData`).
 
 ## Custom Identity Provider
 

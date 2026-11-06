@@ -7,14 +7,13 @@
  * ## Package Exports
  *
  * - `mcp-oidc-provider` - Core types, createOidcProvider, utilities
- * - `mcp-oidc-provider/oidc` - OidcClient, createOidcServer (standalone OIDC server)
- * - `mcp-oidc-provider/mcp` - setupMcpExpress (integrated), createMcpAuthProvider (standalone)
+ * - `mcp-oidc-provider/oidc` - OidcClient, createOidcServer (the OIDC server)
+ * - `mcp-oidc-provider/mcp` - createMcpAuthProvider, getIdpTokens (the MCP resource server side, MCP SDK v2)
  *
- * @example Standalone OIDC Server with MCP SDK
+ * @example OIDC server
  * ```typescript
  * import { Keyv } from 'keyv';
  * import { createOidcServer, OidcClient } from 'mcp-oidc-provider/oidc';
- * import { createMcpAuthProvider } from 'mcp-oidc-provider/mcp';
  *
  * const store = new Keyv();
  *
@@ -33,39 +32,25 @@
  * });
  *
  * await oidcServer.start();
+ * ```
  *
- * // Create MCP auth provider for SDK integration
- * const { proxyOAuthServerProviderConfig, mcpRoutes } = createMcpAuthProvider({
+ * @example MCP server (MCP SDK v2)
+ * ```typescript
+ * import { createMcpExpressApp, requireBearerAuth } from '@modelcontextprotocol/express';
+ * import { createMcpAuthProvider } from 'mcp-oidc-provider/mcp';
+ *
+ * // Token verifier and OAuth metadata routes; `store` is the OIDC server's Keyv store.
+ * // Fetches the OIDC server's metadata once, so start the OIDC server first.
+ * const { verifier, mcpRoutes, resourceMetadataUrl } = await createMcpAuthProvider({
  *   oidcBaseUrl: 'http://localhost:4001',
  *   store,
  *   mcpServerBaseUrl: 'http://localhost:3001',
  * });
- * ```
  *
- * @example Integrated MCP Server with OIDC
- * ```typescript
- * import { Keyv } from 'keyv';
- * import { setupMcpExpress } from 'mcp-oidc-provider/mcp';
- * import { OidcClient } from 'mcp-oidc-provider/oidc';
- *
- * const { app, handleMcpRequest } = setupMcpExpress({
- *   idpClient: new OidcClient({
- *     issuer: 'https://your-tenant.auth0.com',
- *     clientId: process.env.OIDC_CLIENT_ID!,
- *     clientSecret: process.env.OIDC_CLIENT_SECRET!,
- *     redirectUri: `${process.env.BASE_URL}/oauth/callback`,
- *   }),
- *   store: new Keyv(),
- *   baseUrl: process.env.BASE_URL!,
- *   secret: process.env.SESSION_SECRET!,
- * });
- *
- * handleMcpRequest(async (req, res) => {
- *   // req.user contains the authenticated user
- *   console.log('User:', req.user?.userId);
- * });
- *
- * app.listen(3000);
+ * const app = createMcpExpressApp({ host: '0.0.0.0', allowedHosts: ['localhost'] });
+ * app.use(mcpRoutes);
+ * app.post('/mcp', requireBearerAuth({ verifier, resourceMetadataUrl }), mcpHandler);
+ * app.listen(3001);
  * ```
  *
  * @packageDocumentation

@@ -1,8 +1,9 @@
 /**
  * Standalone OIDC server for MCP authentication.
  *
- * This module provides a standalone Express OIDC server that can be used with
- * the MCP SDK's ProxyOAuthServerProvider. It handles:
+ * This module provides a standalone Express OIDC server that acts as the
+ * authorization server for MCP resource servers built with the MCP SDK v2
+ * (see `createMcpAuthProvider` in `mcp-oidc-provider/mcp`). It handles:
  * - Dynamic Client Registration
  * - OAuth 2.0 Authorization Code Flow with PKCE
  * - Token issuance and validation
@@ -91,8 +92,8 @@ export interface OidcServerResult {
  * Create a standalone OIDC server.
  *
  * This creates an Express server that acts as an OIDC provider with Dynamic Client
- * Registration support. It can be used with the MCP SDK's `ProxyOAuthServerProvider`
- * to handle OAuth for MCP servers.
+ * Registration support. Pair it with `createMcpAuthProvider` from `mcp-oidc-provider/mcp`
+ * and the MCP SDK's `requireBearerAuth` to protect your MCP server.
  *
  * @param options - Server options
  * @returns Server instance that can be started
@@ -118,21 +119,18 @@ export interface OidcServerResult {
  * await server.start();
  * console.log(`OIDC server running at ${server.baseUrl}`);
  *
- * // Then in your MCP server, use SDK's ProxyOAuthServerProvider:
- * import { mcpAuthRouter, ProxyOAuthServerProvider } from '@modelcontextprotocol/sdk/server';
+ * // Then in your MCP server (MCP SDK v2):
+ * import { requireBearerAuth } from '@modelcontextprotocol/express';
+ * import { createMcpAuthProvider } from 'mcp-oidc-provider/mcp';
  *
- * const authProvider = new ProxyOAuthServerProvider({
- *   endpoints: {
- *     authorizationUrl: `${server.baseUrl}/authorize`,
- *     tokenUrl: `${server.baseUrl}/token`,
- *     registrationUrl: `${server.baseUrl}/register`,
- *   },
- *   verifyAccessToken: async (token) => {
- *     // Verify token with the OIDC server
- *   },
+ * const { verifier, mcpRoutes, resourceMetadataUrl } = createMcpAuthProvider({
+ *   oidcBaseUrl: server.baseUrl,
+ *   store,
+ *   mcpServerBaseUrl: 'http://localhost:3001',
  * });
  *
- * app.use(mcpAuthRouter({ provider: authProvider }));
+ * app.use(mcpRoutes);
+ * app.post('/mcp', requireBearerAuth({ verifier, resourceMetadataUrl }), mcpHandler);
  * ```
  */
 export function createOidcServer(options: OidcServerOptions): OidcServerResult {

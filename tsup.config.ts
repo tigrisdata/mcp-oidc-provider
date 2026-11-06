@@ -18,5 +18,7 @@ export default defineConfig({
     'express-session',
     'keyv',
     'openid-client',
+    '@modelcontextprotocol/express',
+    '@modelcontextprotocol/server',
   ],
 });

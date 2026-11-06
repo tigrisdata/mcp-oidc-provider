@@ -7,15 +7,13 @@ This is `mcp-oidc-provider` - an Express middleware that acts as an OIDC provide
 ## Key Concepts
 
 - **OIDC Provider**: Acts as a man-in-the-middle between MCP clients and upstream identity providers
-- **Two Deployment Modes**:
-  - **Standalone**: Separate OIDC server, MCP server proxies auth requests to it
-  - **Integrated**: Single Express app hosting both OIDC and MCP
+- **Deployment**: The OIDC server is its own Express app (`createOidcServer`). The MCP server is an OAuth resource server built with the MCP TypeScript SDK v2: `requireBearerAuth` from `@modelcontextprotocol/express` with the verifier and metadata routes from `createMcpAuthProvider`
 - **Storage**: Uses Keyv for abstraction - supports any Keyv-compatible backend (Tigris, Redis, in-memory)
 
 ## Project Structure
 
 - `src/oidc/` - Core OIDC server implementation (`createOidcServer`, `OidcClient`)
-- `src/mcp/` - MCP-specific utilities (`setupMcpExpress`, `createMcpAuthProvider`)
+- `src/mcp/` - MCP resource server side (`createMcpAuthProvider`, `getIdpTokens`)
 - `src/core/` - Core provider implementation
 - `src/utils/` - Utilities (JWKS generation, etc.)
 - `example/` - Example implementations
