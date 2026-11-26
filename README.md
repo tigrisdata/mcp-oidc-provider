@@ -1,5 +1,12 @@
 # mcp-oidc-provider
 
+> [!WARNING]
+> **This repository is archived and the npm package is deprecated.** It is no longer maintained and will receive no further updates or security fixes.
+>
+> We built this package to work around the limits of using an identity provider as-is for MCP authorization, chiefly dynamic client registration creating a new application in the identity provider for every client. Client ID Metadata Documents (CIMD), now the recommended way for MCP clients to identify themselves, remove most of that need, and identity providers such as Auth0 support them. Read [You don't need to make your own OIDC server anymore](https://www.tigrisdata.com/blog/you-dont-need-make-oidc-server/) for the full story and what we run instead.
+>
+> If you still need this package, please fork it and maintain your own copy.
+
 ![GitHub License](https://img.shields.io/github/license/tigrisdata/mcp-oidc-provider)
 [![NPM Version](https://img.shields.io/npm/v/mcp-oidc-provider 'NPM Version ')](https://www.npmjs.com/package/mcp-oidc-provider)
 [![CI](https://github.com/tigrisdata/mcp-oidc-provider/actions/workflows/ci.yml/badge.svg)](https://github.com/tigrisdata/mcp-oidc-provider/actions/workflows/ci.yml)
